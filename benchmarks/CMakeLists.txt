@@ -7,8 +7,8 @@ list(
   SOURCE_FILES
   baseline/baseline.cc
   baseline/baseline.cu
-  # no_divergence_branch/no_divergence_branch.cc
-  # no_divergence_branch/no_divergence_branch.cu
+  unroll/unroll.cc
+  unroll/unroll.cu
   # no_bank_conflict/no_bank_conflict.cc
   # no_bank_conflict/no_bank_conflict.cu
   # add_during_load/add_during_load.cc
