@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "baseline/baseline.cuh"
+#include "stride/stride.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,14 +13,14 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class Baseline : public benchmark::Fixture {
+class Stride : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     cudaMemcpy(dA, A, sizeof(T) * dataSize, cudaMemcpyHostToDevice);
     cudaMemcpy(dB, B, sizeof(T) * dataSize, cudaMemcpyHostToDevice);
 
     // call kernel
-    GEMM<TPB>(dA, dB, dC, M, N, K);
+    GEMM3<TPB>(dA, dB, dC, M, N, K);
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -60,8 +60,8 @@ class Baseline : public benchmark::Fixture {
   long int dataSize;
 };
 
-#define BENCHMARK_GEMM1_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Baseline, name, dType)                   \
+#define BENCHMARK_GEMM3_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(Stride, name, dType)                     \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -70,12 +70,12 @@ class Baseline : public benchmark::Fixture {
     st.counters["FLOPS"] = benchmark::Counter{                         \
         getDataSize(), benchmark::Counter::kIsIterationInvariantRate}; \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Baseline, name)                                 \
+  BENCHMARK_REGISTER_F(Stride, name)                                   \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
       ->Range(1024, 2048);
 
-#define BENCHMARK_GEMM1_OP_TYPE(dType) BENCHMARK_GEMM1_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM3_OP_TYPE(dType) BENCHMARK_GEMM3_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM1_OP_TYPE(float)
-// BENCHMARK_GEMM1_OP_TYPE(int)
+BENCHMARK_GEMM3_OP_TYPE(float)
+// BENCHMARK_GEMM3_OP_TYPE(int)

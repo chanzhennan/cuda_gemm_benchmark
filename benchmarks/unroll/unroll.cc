@@ -21,7 +21,6 @@ class Unroll : public benchmark::Fixture {
 
     // call kernel
     GEMM2<TPB>(dA, dB, dC, M, N, K);
-
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -40,7 +39,6 @@ class Unroll : public benchmark::Fixture {
 
     cudabm::genRandom(A, dataSize);
     cudabm::genRandom(B, dataSize);
-    
   }
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
@@ -62,8 +60,8 @@ class Unroll : public benchmark::Fixture {
   long int dataSize;
 };
 
-#define BENCHMARK_GEMM2_OP(name, dType)                              \
-  BENCHMARK_TEMPLATE_DEFINE_F(Unroll, name, dType)                   \
+#define BENCHMARK_GEMM2_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(Unroll, name, dType)                     \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -72,13 +70,12 @@ class Unroll : public benchmark::Fixture {
     st.counters["FLOPS"] = benchmark::Counter{                         \
         getDataSize(), benchmark::Counter::kIsIterationInvariantRate}; \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Unroll, name)                                 \
+  BENCHMARK_REGISTER_F(Unroll, name)                                   \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
       ->Range(1024, 2048);
 
-#define BENCHMARK_GEMM2_OP_TYPE(dType) \
-  BENCHMARK_GEMM2_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM2_OP_TYPE(dType) BENCHMARK_GEMM2_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM2_OP_TYPE(float)
 // BENCHMARK_GEMM2_OP_TYPE(int)
