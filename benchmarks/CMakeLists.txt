@@ -11,7 +11,8 @@ list(
   unroll/unroll.cu
   stride/stride.cc
   stride/stride.cu
-  # add_during_load/add_during_load.cc add_during_load/add_during_load.cu
+  fix_block_size/fix_block_size.cc
+  fix_block_size/fix_block_size.cu
   # unroll_last_warp/unroll_last_warp.cc unroll_last_warp/unroll_last_warp.cu
   # completely_unroll/completely_unroll.cc
   # completely_unroll/completely_unroll.cu shuffle/shuffle.cc shuffle/shuffle.cu
