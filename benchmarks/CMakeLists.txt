@@ -15,9 +15,12 @@ list(
   fix_block_size/fix_block_size.cu
   outer_memory/outer_memory.cc
   outer_memory/outer_memory.cu
-  # completely_unroll/completely_unroll.cc
-  # completely_unroll/completely_unroll.cu shuffle/shuffle.cc shuffle/shuffle.cu
-)
+  completely_unroll/completely_unroll.cc
+  completely_unroll/completely_unroll.cu
+  define_extend/define_extend.cc
+  define_extend/define_extend.cu
+  interleave/interleave.cc
+  interleave/interleave.cu)
 
 cuda_add_executable(cuda_benchmark ${SOURCE_FILES})
 target_link_libraries(cuda_benchmark bm_lib)
