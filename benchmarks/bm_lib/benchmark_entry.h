@@ -2,6 +2,7 @@
 #pragma once
 
 #include <benchmark/benchmark.h>
+#include <cublas.h>
 #include <cuda_runtime.h>
 
 #include <iostream>
