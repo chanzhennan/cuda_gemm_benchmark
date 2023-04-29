@@ -16,9 +16,6 @@ template <typename T>
 class Unroll : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
-    cudaMemcpy(dA, A, sizeof(T) * dataSize, cudaMemcpyHostToDevice);
-    cudaMemcpy(dB, B, sizeof(T) * dataSize, cudaMemcpyHostToDevice);
-
     // call kernel
     GEMM2<TPB>(dA, dB, dC, M, N, K);
   }
@@ -30,32 +27,32 @@ class Unroll : public benchmark::Fixture {
     K = state.range(0);
 
     // Populate array
-    cudaMallocHost(&A, sizeof(T) * dataSize);
-    cudaMallocHost(&B, sizeof(T) * dataSize);
-    cudaMallocHost(&C, sizeof(T) * dataSize);
-    cudaMalloc((void **)&dA, sizeof(T) * dataSize);
-    cudaMalloc((void **)&dB, sizeof(T) * dataSize);
-    cudaMalloc((void **)&dC, sizeof(T) * dataSize);
+    cudaMallocManaged((void **)&dA, sizeof(T) * dataSize);
+    cudaMallocManaged((void **)&dB, sizeof(T) * dataSize);
+    cudaMallocManaged((void **)&dC, sizeof(T) * dataSize);
+    cudaMallocManaged((void **)&testC, sizeof(T) * dataSize);
 
-    cudabm::genRandom(A, dataSize);
-    cudabm::genRandom(B, dataSize);
+    cudabm::genRandom(dA, dataSize);
+    cudabm::genRandom(dB, dataSize);
+
+    cudabm::Gemm(dA, dB, testC, M, N, K);
   }
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
+    if (!cudabm::Equal<T>(M * N, dC, testC, 1e-2))
+      throw std::runtime_error("Value diff occur in unroll");
+
     cudaFree(dA);
     cudaFree(dB);
     cudaFree(dC);
-    cudaFreeHost(A);
-    cudaFreeHost(B);
-    cudaFreeHost(C);
+    cudaFree(testC);
   }
 
   double getDataSize() { return (double)dataSize; }
 
  private:
-  T *dA, *A;
-  T *dB, *B;
-  T *dC, *C;
+  T *dA, *dB;
+  T *testC, *dC;
   int M, N, K;
   long int dataSize;
 };

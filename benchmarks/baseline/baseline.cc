@@ -18,16 +18,6 @@ class Baseline : public benchmark::Fixture {
   void callKernel(benchmark::State &state) {
     // call kernel
     GEMM<TPB>(dA, dB, dC, M, N, K);
-
-    // for (int i = 0; i < M; i++)
-    // {
-    //   for (int j = 0; j < N; j++)
-    //   {
-    //     std::cout << dC[i * M + j] << " ";
-    //   }
-
-    //   std::cout << "\n";
-    // }
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
