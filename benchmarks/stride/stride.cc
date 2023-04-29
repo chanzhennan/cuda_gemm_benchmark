@@ -40,7 +40,7 @@ class Stride : public benchmark::Fixture {
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
     if (!cudabm::Equal<T>(M * N, dC, testC, 1e-2))
-      throw std::runtime_error("Value diff occur in unroll");
+      throw std::runtime_error("Value diff occur in stride");
 
     cudaFree(dA);
     cudaFree(dB);

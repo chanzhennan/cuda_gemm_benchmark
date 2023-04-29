@@ -70,7 +70,6 @@ class Baseline : public benchmark::Fixture {
   BENCHMARK_REGISTER_F(Baseline, name)                                 \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
-      ->Iterations(1)                                                  \
       ->Range(1024, 2048);
 
 #define BENCHMARK_GEMM1_OP_TYPE(dType) BENCHMARK_GEMM1_OP(Gemm_##dType, dType)

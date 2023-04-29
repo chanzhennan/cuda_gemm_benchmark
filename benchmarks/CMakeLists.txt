@@ -13,7 +13,8 @@ list(
   stride/stride.cu
   fix_block_size/fix_block_size.cc
   fix_block_size/fix_block_size.cu
-  # outer_memory/outer_memory.cc outer_memory/outer_memory.cu
+  outer_memory/outer_memory.cc
+  outer_memory/outer_memory.cu
   # completely_unroll/completely_unroll.cc
   # completely_unroll/completely_unroll.cu define_extend/define_extend.cc
   # define_extend/define_extend.cu interleave/interleave.cc
