@@ -76,7 +76,7 @@ class Blocker : public benchmark::Fixture {
   BENCHMARK_REGISTER_F(Blocker, name)                                  \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
-      ->Range(2048, 4096);
+      ->Range(4096, 8192);
 
 #define BENCHMARK_GEMM1_OP_TYPE(dType) BENCHMARK_GEMM1_OP(Gemm_##dType, dType)
 

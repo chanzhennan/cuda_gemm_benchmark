@@ -11,7 +11,8 @@ list(
   MatrixMulCUDA1/blocker.cu
   MatrixMulCUDA2/strider.cc
   MatrixMulCUDA2/strider.cu
-  # fix_block_size/fix_block_size.cc fix_block_size/fix_block_size.cu
+  MatrixMulCUDA3/aligner.cc
+  MatrixMulCUDA3/aligner.cu
   # outer_memory/outer_memory.cc outer_memory/outer_memory.cu
   # completely_unroll/completely_unroll.cc
   # completely_unroll/completely_unroll.cu define_extend/define_extend.cc

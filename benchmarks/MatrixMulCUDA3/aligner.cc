@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "MatrixMulCUDA2/strider.cuh"
+#include "MatrixMulCUDA3/aligner.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,11 +13,11 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class Strider : public benchmark::Fixture {
+class Aligner : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM2<BLOCKSIZE>(dA, dB, dC, state.range(0), state.range(0),
+    GEMM3<BLOCKSIZE>(dA, dB, dC, state.range(0), state.range(0),
                      state.range(0));
   }
 
@@ -63,8 +63,8 @@ class Strider : public benchmark::Fixture {
   long int flops;
 };
 
-#define BENCHMARK_GEMM2_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Strider, name, dType)                    \
+#define BENCHMARK_GEMM3_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(Aligner, name, dType)                    \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -73,12 +73,12 @@ class Strider : public benchmark::Fixture {
     st.counters["FLOPS"] =                                             \
         benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Strider, name)                                  \
+  BENCHMARK_REGISTER_F(Aligner, name)                                  \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
       ->Range(4096, 8192);
 
-#define BENCHMARK_GEMM2_OP_TYPE(dType) BENCHMARK_GEMM2_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM3_OP_TYPE(dType) BENCHMARK_GEMM3_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM2_OP_TYPE(float)
-// BENCHMARK_GEMM2_OP_TYPE(int)
+BENCHMARK_GEMM3_OP_TYPE(float)
+// BENCHMARK_GEMM3_OP_TYPE(int)

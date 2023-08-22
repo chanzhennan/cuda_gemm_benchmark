@@ -75,7 +75,7 @@ class Naive : public benchmark::Fixture {
   BENCHMARK_REGISTER_F(Naive, name)                                    \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
-      ->Range(2048, 4096);
+      ->Range(4096, 8192);
 
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 
