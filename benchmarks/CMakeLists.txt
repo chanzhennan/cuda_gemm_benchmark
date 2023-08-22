@@ -7,7 +7,10 @@ list(
   SOURCE_FILES
   MatrixMulCUDA0/naive.cc
   MatrixMulCUDA0/naive.cu
-  # unroll/unroll.cc unroll/unroll.cu stride/stride.cc stride/stride.cu
+  MatrixMulCUDA1/blocker.cc
+  MatrixMulCUDA1/blocker.cu
+  MatrixMulCUDA2/strider.cc
+  MatrixMulCUDA2/strider.cu
   # fix_block_size/fix_block_size.cc fix_block_size/fix_block_size.cu
   # outer_memory/outer_memory.cc outer_memory/outer_memory.cu
   # completely_unroll/completely_unroll.cc

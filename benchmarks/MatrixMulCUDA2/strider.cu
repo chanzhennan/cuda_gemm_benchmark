@@ -1,8 +1,8 @@
-#include "stride/stride.cuh"
+#include "MatrixMulCUDA2/strider.cuh"
 
 // a = mxk, b = kxn
 template <int BLOCK, int STRIDE, typename T>
-__global__ void gemm_kernel3(int m, int n, int k, T *a, T *b, T *c) {
+__global__ void gemm_kernel2(int m, int n, int k, T *a, T *b, T *c) {
   // blockIdx control subpanel matrix
   constexpr int STEP = BLOCK * STRIDE;
   const int tx = threadIdx.x;
@@ -52,15 +52,29 @@ __global__ void gemm_kernel3(int m, int n, int k, T *a, T *b, T *c) {
 }
 
 template <size_t BLOCK, typename T>
-void GEMM3(T *dA, T *dB, T *dC, int m, int n, int k) {
+void GEMM2(T *dA, T *dB, T *dC, int m, int n, int k) {
+  /*  (BLOCK * BLOCK) threads calc ((BLOCK + STRIDE) * (BLOCK + STRIDE)) data
+   *
+   *  t0 t1 t0 t1 - - - - -
+   *  t2 t3 t2 t3 - - - - -
+   *  - - - - - - - - - - -
+   *  - - - - - - - - - - -
+   *  - - - - - - - - - - -
+   *  - - - - - - - - - - -
+   *  1. clac (block+stride) * (block+stride) each warp
+   *  2. load Gmem -> Smem each thread
+   *  3. clac 2 FMA each thread
+   *  this kerenl STRIDE = 2
+   */
+
   constexpr int STRIDE = 2;  // every thread calc STRIDExSTRIDE result
   dim3 block(BLOCK, BLOCK);
   dim3 grid((m + BLOCK - 1) / BLOCK / STRIDE, (n + BLOCK - 1) / BLOCK / STRIDE);
-  gemm_kernel3<BLOCK, STRIDE><<<grid, block>>>(m, n, k, dA, dB, dC);
+  gemm_kernel2<BLOCK, STRIDE><<<grid, block>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
-template void GEMM3<TPB, float>(float *dA, float *dB, float *dC, int m, int n,
+template void GEMM2<TPB, float>(float *dA, float *dB, float *dC, int m, int n,
                                 int k);
-// template void GEMM3<TPB, int>(int *dA, int *dB, int *dC, int m, int n, int
+// template void GEMM2<TPB, int>(int *dA, int *dB, int *dC, int m, int n, int
 // k);
