@@ -5,16 +5,11 @@ set(SOURCE_FILES cuda_benchmark.cc)
 list(
   APPEND
   SOURCE_FILES
-  baseline/baseline.cc
-  baseline/baseline.cu
-  unroll/unroll.cc
-  unroll/unroll.cu
-  stride/stride.cc
-  stride/stride.cu
-  fix_block_size/fix_block_size.cc
-  fix_block_size/fix_block_size.cu
-  outer_memory/outer_memory.cc
-  outer_memory/outer_memory.cu
+  MatrixMulCUDA0/naive.cc
+  MatrixMulCUDA0/naive.cu
+  # unroll/unroll.cc unroll/unroll.cu stride/stride.cc stride/stride.cu
+  # fix_block_size/fix_block_size.cc fix_block_size/fix_block_size.cu
+  # outer_memory/outer_memory.cc outer_memory/outer_memory.cu
   # completely_unroll/completely_unroll.cc
   # completely_unroll/completely_unroll.cu define_extend/define_extend.cc
   # define_extend/define_extend.cu interleave/interleave.cc
