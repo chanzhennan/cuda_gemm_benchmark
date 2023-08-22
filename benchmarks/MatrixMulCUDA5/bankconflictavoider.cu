@@ -1,7 +1,7 @@
-#include "outer_memory/outer_memory.cuh"
+#include "MatrixMulCUDA5/bankconflictavoider.cuh"
 
 // a = mxk, b = kxn
-__global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
+__global__ void gemm_kernel5(int m, int n, int k, float *a, float *b,
                              float *c) {
   const int tx = (threadIdx.x % 16) * 2;
   const int ty = threadIdx.x / 16 * 2;
@@ -68,14 +68,27 @@ __global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
   }
 }
 template <typename T>
-void GEMM6(T *dA, T *dB, T *dC, int m, int n, int k) {
+void GEMM5(T *dA, T *dB, T *dC, int m, int n, int k) {
+  /*  each thread load 16 ashare and 16 bshare calc 16 FMA
+   *  avoiding shared mem bank conflict by stride 32
+   *
+   *  ashared
+   *  t0 - 32*mem - t0 - 32*mem - t0
+   *  - - - - - - - - - - - -
+   *  - - - - - - - - - - - -
+   *  - - - - - - - - - - - -
+   *  - - - - - - - - - - - -
+   *  - - - - - - - - - - - -
+   *  1. load 4 * 4 float each thread
+   *  2. load Gmem -> Smem each thread
+   *  3. clac 16 FMA each thread
+   */
+
   dim3 block(256);
   dim3 grid(m / 64, n / 64);
-  gemm_kernel6<<<grid, block>>>(m, n, k, dA, dB, dC);
+  gemm_kernel5<<<grid, block>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
-template void GEMM6<float>(float *dA, float *dB, float *dC, int m, int n,
+template void GEMM5<float>(float *dA, float *dB, float *dC, int m, int n,
                            int k);
-// template void GEMM6<TPB, int>(int *dA, int *dB, int *dC, int m, int n, int
-// k);

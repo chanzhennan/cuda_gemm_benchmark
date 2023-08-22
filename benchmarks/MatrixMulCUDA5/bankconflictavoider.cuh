@@ -4,4 +4,4 @@
 #include <iostream>
 
 template <typename T>
-void GEMM6(T *dA, T *dB, T *dC, int m, int n, int k);
+void GEMM5(T *dA, T *dB, T *dC, int m, int n, int k);

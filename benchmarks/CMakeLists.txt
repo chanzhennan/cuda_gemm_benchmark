@@ -15,10 +15,10 @@ list(
   MatrixMulCUDA3/aligner.cu
   MatrixMulCUDA4/doubleloader.cc
   MatrixMulCUDA4/doubleloader.cu
-  # completely_unroll/completely_unroll.cc
-  # completely_unroll/completely_unroll.cu define_extend/define_extend.cc
-  # define_extend/define_extend.cu interleave/interleave.cc
-  # interleave/interleave.cu
+  MatrixMulCUDA5/bankconflictavoider.cc
+  MatrixMulCUDA5/bankconflictavoider.cu
+  # define_extend/define_extend.cc define_extend/define_extend.cu
+  # interleave/interleave.cc interleave/interleave.cu
 )
 
 cuda_add_executable(cuda_benchmark ${SOURCE_FILES})
