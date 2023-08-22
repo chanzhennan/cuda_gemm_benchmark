@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "MatrixMulCUDA5/bankconflictavoider.cuh"
+#include "MatrixMulCUDA6/pingpangbuffer.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,11 +13,12 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class BcAvoider : public benchmark::Fixture {
+class PpBuffer : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM5(dA, dB, dC, state.range(0), state.range(0), state.range(0));
+    GEMM6<BLOCKSIZE>(dA, dB, dC, state.range(0), state.range(0),
+                     state.range(0));
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -62,8 +63,8 @@ class BcAvoider : public benchmark::Fixture {
   long int flops;
 };
 
-#define BENCHMARK_GEMM5_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(BcAvoider, name, dType)                  \
+#define BENCHMARK_GEMM6_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(PpBuffer, name, dType)                   \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -72,11 +73,11 @@ class BcAvoider : public benchmark::Fixture {
     st.counters["FLOPS"] =                                             \
         benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
   }                                                                    \
-  BENCHMARK_REGISTER_F(BcAvoider, name)                                \
+  BENCHMARK_REGISTER_F(PpBuffer, name)                                 \
       ->Unit(benchmark::kMillisecond)                                  \
       ->RangeMultiplier(2)                                             \
-      ->Range(8192, 16384);
+      ->Range(16384, 32768);
 
-#define BENCHMARK_GEMM5_OP_TYPE(dType) BENCHMARK_GEMM5_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM6_OP_TYPE(dType) BENCHMARK_GEMM6_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM5_OP_TYPE(float)
+BENCHMARK_GEMM6_OP_TYPE(float)

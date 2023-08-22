@@ -17,7 +17,8 @@ list(
   MatrixMulCUDA4/doubleloader.cu
   MatrixMulCUDA5/bankconflictavoider.cc
   MatrixMulCUDA5/bankconflictavoider.cu
-  # define_extend/define_extend.cc define_extend/define_extend.cu
+  MatrixMulCUDA6/pingpangbuffer.cc
+  MatrixMulCUDA6/pingpangbuffer.cu
   # interleave/interleave.cc interleave/interleave.cu
 )
 
