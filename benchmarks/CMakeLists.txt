@@ -13,7 +13,8 @@ list(
   MatrixMulCUDA2/strider.cu
   MatrixMulCUDA3/aligner.cc
   MatrixMulCUDA3/aligner.cu
-  # outer_memory/outer_memory.cc outer_memory/outer_memory.cu
+  MatrixMulCUDA4/doubleloader.cc
+  MatrixMulCUDA4/doubleloader.cu
   # completely_unroll/completely_unroll.cc
   # completely_unroll/completely_unroll.cu define_extend/define_extend.cc
   # define_extend/define_extend.cu interleave/interleave.cc

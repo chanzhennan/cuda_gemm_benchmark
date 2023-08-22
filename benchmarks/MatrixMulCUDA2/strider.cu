@@ -76,5 +76,3 @@ void GEMM2(T *dA, T *dB, T *dC, int m, int n, int k) {
 
 template void GEMM2<BLOCKSIZE, float>(float *dA, float *dB, float *dC, int m,
                                       int n, int k);
-// template void GEMM2<TPB, int>(int *dA, int *dB, int *dC, int m, int n, int
-// k);
