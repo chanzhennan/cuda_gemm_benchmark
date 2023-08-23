@@ -1,36 +1,81 @@
-#include "define_extend/define_extend.cuh"
+#include "MatrixMulCUDA7/sgemm128.cuh"
 
 #define SMEM_LDA (128)
 #define SMEM_LDB (128)
 
 // sgemm_128x128x8
-__global__ __launch_bounds__(256, 2) void gemm_kernel8(int m, int n, int k,
+// limit maxThreadsPerBlock in 256,
+// limit minBlocksPerMultiprocessor in 2 (at least 2 active warp resource)
+__global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
                                                        const float *a,
                                                        const float *b,
                                                        float *c) {
   __shared__ __align__(
       16 * 1024) char smem[24 * 1024];  // 16KB shared memory for buffer
-  float *ashare = reinterpret_cast<float *>(smem);
-  float *bshare =
-      reinterpret_cast<float *>(smem + 16 * 1024);  // 8k shared mem for B
-  float sum[8][8] = {0};
+
+  float *ashare = reinterpret_cast<float *>(smem);  // 16K Smem for A
+  float *bshare = reinterpret_cast<float *>(smem + 16 * 1024);  // 8k Smem for B
+
+  float sum[8][8] = {0};  // do 64 FMA each thread
   float panelA[8] = {0}, panelB[8] = {0};
 
-  int from_a = (blockIdx.y * 128 + threadIdx.x / 8 * 4) * k + threadIdx.x % 8;
-  int from_b = (threadIdx.x / 32) * n + blockIdx.x * 128 + threadIdx.x % 32;
+  int idx8 = threadIdx.x % 8;  // 128 ==>  8 * 16
+  int idy8 = threadIdx.x / 8;
+
+  int idx32 = threadIdx.x % 32;  // 128 ==>  32 * 4
+  int idy32 = threadIdx.x / 32;
+
+  int from_a = (blockIdx.y * 128 + idy8 * 4) * k + idx8;
+  int from_b = (idy32)*n + blockIdx.x * 128 + idx32;
+
+  /*
+  *  matA(m * k) @ matb(k * n)
+  *  this loop is important:
+  *
+  *              / -------------------------- k = 4096
+  ---------------------------- /
+  *              | 8  |
+  *   aglobal
+  --|----|----|----|----|----|----|----|----||----|----|----|----|----|
+  *            16|/// |    |    |    |    |    |    |    ||/// |    |    |    |
+  |
+  * --|----|----|----|----|----|----|----|----||----|----|----|----|----|
+  *
+  *                ||
+  *                ||  load && calc ---> loop(k/8)
+  *                \/
+  *
+  *              |----|    ashare 4 * 1024 * float
+  *              |warp|    bshare 2 * 1024 * flaot
+  *              |----|
+  *
+  *                /\
+  *                ||
+  *                ||
+  *
+  *              | 32 |
+  *   bglobal
+  --|----|----|----|----|----|----|----|----||----|----|----|----|----|
+  *            4 |/// |    |    |    |    |    |    |    ||/// |    |    |    |
+  |
+  * --|----|----|----|----|----|----|----|----||----|----|----|----|----|
+  *              / -------------------------- k = 4096
+  ---------------------------- /
+
+  */
 
   for (int loop = 0; loop < k; loop += 8) {
     // part1: gmem to smem
+
     // load gmem to smem for ashare
-    int to_a = (threadIdx.x % 8) * SMEM_LDA +
-               (threadIdx.x / 8) * 4;  // 连续的地址不能给同一个 thread 用
+    int to_a = idx8 * SMEM_LDA + idy8 * 4;  // 连续的地址不能给同一个 thread 用
 #pragma unroll
     for (int i = 0; i < 4; ++i) {
       ashare[to_a + i] = a[from_a + i * k];
     }
 
     // load gmem to smem for bshare
-    int to_b = (threadIdx.x / 32) * SMEM_LDB + (threadIdx.x % 32);
+    int to_b = idy32 * SMEM_LDB + idx32;
 #pragma unroll
     for (int i = 0; i < 4; ++i) {
       bshare[to_b + i * 32] =
@@ -46,6 +91,15 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel8(int m, int n, int k,
     // 计算 2x2 个 4x4
     int aidx0 = (threadIdx.x / 16) * 4;
     int bidx0 = (threadIdx.x % 16) * 4;
+
+    /*
+     *
+     *  It must calc FMA k(8) num in each loop
+     *  1. prepare 8 data to panelA (using 64 interleave)
+     *  2. prepare 8 data to panelB (using 64 interleave)
+     *  3. FMA
+     */
+
 #pragma unroll
     for (int subk = 0; subk < 8; ++subk) {
       float *ptrA = ashare + aidx0 + subk * SMEM_LDA;
@@ -92,14 +146,12 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel8(int m, int n, int k,
 #undef SMEM_LDB
 
 template <typename T>
-void GEMM8(T *dA, T *dB, T *dC, int m, int n, int k) {
+void GEMM7(T *dA, T *dB, T *dC, int m, int n, int k) {
   constexpr int BLOCK = 128;
   dim3 grid((m + BLOCK - 1) / BLOCK, (n + BLOCK - 1) / BLOCK);
-  gemm_kernel8<<<grid, 256>>>(m, n, k, dA, dB, dC);
+  gemm_kernel7<<<grid, 256>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
-template void GEMM8<float>(float *dA, float *dB, float *dC, int m, int n,
+template void GEMM7<float>(float *dA, float *dB, float *dC, int m, int n,
                            int k);
-// template void GEMM8<TPB, int>(int *dA, int *dB, int *dC, int m, int n, int
-// k);

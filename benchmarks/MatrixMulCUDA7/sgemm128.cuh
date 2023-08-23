@@ -1,8 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#define TPB 8
 
 #include <iostream>
 
-template <size_t BLOCK, typename T>
+template <typename T>
 void GEMM7(T *dA, T *dB, T *dC, int m, int n, int k);

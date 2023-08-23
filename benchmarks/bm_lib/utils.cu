@@ -56,10 +56,10 @@ void genRandom(std::vector<float>& vec) {
   std::generate_n(vec.begin(), vec.size(), [&] { return dist(gen); });
 }
 
-void genRandom(float* vec, size_t len) {
+void genRandom(float* vec, unsigned long len) {
   std::mt19937 gen;
   std::uniform_real_distribution<> dist(-10.0, 10.0);
-  for (int i = 0; i < len; i++) {
+  for (unsigned long i = 0; i < len; i++) {
     vec[i] = dist(gen);
   }
 }
@@ -84,17 +84,18 @@ float Sum(float* vec, size_t len) {
 void Gemm(float* dA, float* dB, float* dC, int m, int n, int k) {
   float alpha = 1.0f;
   float beta = 0.0f;
-  cublasHandle_t handle;
-  cublasStatus_t status = cublasCreate(&handle);
 
-  if (status != CUBLAS_STATUS_SUCCESS)
-    std::runtime_error("!!!! CUBLAS initialization error\n");
+  cublasHandle_t blas_handle;
+  cublasCreate(&blas_handle);
+
+  // if (status != CUBLAS_STATUS_SUCCESS)
+  //   std::runtime_error("!!!! CUBLAS initialization error\n");
 
   // C = A X B
-  status = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, dB, m,
-                       dA, k, &beta, dC, m);
-
-  cudaDeviceSynchronize();
+  cublasSgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, dB, n, dA,
+              k, &beta, dC, n);
+  cublasDestroy(blas_handle);
+  // cudaDeviceSynchronize();
 }
 
 // Equal

@@ -24,6 +24,7 @@ __global__ void gemm_kernel(T *A, T *B, T *C, int m, int n, int k) {
 template <size_t threadsPerBlock, typename T>
 void GEMM0(T *dA, T *dB, T *dC, int m, int n, int k) {
   int blocks = ceil((float)m * n / threadsPerBlock);
+
   gemm_kernel<<<blocks, threadsPerBlock>>>(dA, dB, dC, m, n, k);
   cudaDeviceSynchronize();
 }

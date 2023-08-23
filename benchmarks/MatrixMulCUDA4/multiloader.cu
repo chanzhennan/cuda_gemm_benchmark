@@ -1,4 +1,4 @@
-#include "MatrixMulCUDA4/doubleloader.cuh"
+#include "MatrixMulCUDA4/multiloader.cuh"
 
 // a = mxk, b = kxn
 template <int BLOCK, int STRIDE>

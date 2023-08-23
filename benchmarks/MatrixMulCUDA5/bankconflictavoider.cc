@@ -17,28 +17,36 @@ class BcAvoider : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM5(dA, dB, dC, state.range(0), state.range(0), state.range(0));
+    GEMM5(dA, dB, dC, state.range(0), state.range(1), state.range(2));
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
     // Populate array
-    long int dsize = state.range(0) * state.range(0);
-    cudaMallocManaged(&dA, sizeof(T) * dsize);
-    cudaMallocManaged(&dB, sizeof(T) * dsize);
-    cudaMallocManaged(&dC, sizeof(T) * dsize);
-    cudaMallocManaged(&testC, sizeof(T) * dsize);
+    unsigned long M = (unsigned long)state.range(0);
+    unsigned long N = (unsigned long)state.range(1);
+    unsigned long K = (unsigned long)state.range(2);
+    unsigned long asize = M * K;
+    unsigned long bsize = K * N;
+    unsigned long csize = M * N;
 
-    cudabm::genRandom(dA, dsize);
-    cudabm::genRandom(dB, dsize);
+    cudaMallocManaged(&dA, sizeof(T) * asize);
+    cudaMallocManaged(&dB, sizeof(T) * bsize);
+    cudaMallocManaged(&dC, sizeof(T) * csize);
+    cudaMallocManaged(&testC, sizeof(T) * csize);
 
+    cudabm::genRandom(dA, asize);
+    cudabm::genRandom(dB, bsize);
+  }
+
+  void verify(const ::benchmark::State &st) {
     // for test M, N, K = state.range(0)
-    cudabm::Gemm(dA, dB, testC, state.range(0), state.range(0), state.range(0));
+    cudabm::Gemm(dA, dB, testC, st.range(0), st.range(1), st.range(2));
+    if (!cudabm::Equal<T>(st.range(0) * st.range(1), dC, testC, 1e-2))
+      throw std::runtime_error("Value diff occur in BcAvoider");
   }
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
-    // if (!cudabm::Equal<T>(M * N, dC, testC, 1e-2))
-    //   throw std::runtime_error("Value diff occur in Naive");
-
+    // verify(st);
     cudaFree(dA);
     cudaFree(dB);
     cudaFree(dC);
@@ -47,12 +55,12 @@ class BcAvoider : public benchmark::Fixture {
 
   double getDataSize(const ::benchmark::State &state) {
     // datasize = 2 * M * N
-    return (double)(2 * state.range(0) * state.range(0));
+    return (double)(2 * state.range(0) * state.range(1));
   }
 
   double getFlops(const ::benchmark::State &state) {
     // flops =  2 * M * N * K / s
-    return (double)(2 * state.range(0) * state.range(0) * state.range(0));
+    return (double)(2 * state.range(0) * state.range(1) * state.range(2));
   }
 
  private:
@@ -74,9 +82,9 @@ class BcAvoider : public benchmark::Fixture {
   }                                                                    \
   BENCHMARK_REGISTER_F(BcAvoider, name)                                \
       ->Unit(benchmark::kMillisecond)                                  \
-      ->RangeMultiplier(2)                                             \
-      ->Range(8192, 16384);
+      ->ArgsProduct({{8, 16}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM5_OP_TYPE(dType) BENCHMARK_GEMM5_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM5_OP_TYPE(float)
+// BENCHMARK_GEMM5_OP_TYPE(int)

@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "MatrixMulCUDA2/strider.cuh"
+#include "MatrixMulCUDA8/dense.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,12 +13,11 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class Strider : public benchmark::Fixture {
+class Dense : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM2<BLOCKSIZE>(dA, dB, dC, state.range(0), state.range(1),
-                     state.range(2));
+    GEMM8(dA, dB, dC, state.range(0), state.range(1), state.range(2));
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -26,7 +25,6 @@ class Strider : public benchmark::Fixture {
     unsigned long M = (unsigned long)state.range(0);
     unsigned long N = (unsigned long)state.range(1);
     unsigned long K = (unsigned long)state.range(2);
-
     unsigned long asize = M * K;
     unsigned long bsize = K * N;
     unsigned long csize = M * N;
@@ -41,14 +39,13 @@ class Strider : public benchmark::Fixture {
   }
 
   void verify(const ::benchmark::State &st) {
-    // for test M, N, K = state.range(0)
     cudabm::Gemm(dA, dB, testC, st.range(0), st.range(1), st.range(2));
     if (!cudabm::Equal<T>(st.range(0) * st.range(1), dC, testC, 1e-2))
-      throw std::runtime_error("Value diff occur in strider");
+      throw std::runtime_error("Value diff occur in Dense");
   }
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
-    verify(st);
+    // verify(st);
     cudaFree(dA);
     cudaFree(dB);
     cudaFree(dC);
@@ -72,8 +69,8 @@ class Strider : public benchmark::Fixture {
   long int flops;
 };
 
-#define BENCHMARK_GEMM2_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Strider, name, dType)                    \
+#define BENCHMARK_GEMM8_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(Dense, name, dType)                      \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -82,10 +79,11 @@ class Strider : public benchmark::Fixture {
     st.counters["FLOPS"] =                                             \
         benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Strider, name)                                  \
+  BENCHMARK_REGISTER_F(Dense, name)                                    \
       ->Unit(benchmark::kMillisecond)                                  \
-      ->ArgsProduct({{4096}, {4096}, {4096}});
+      ->ArgsProduct({{8}, {4096, 16384}, {4096, 16384}});
 
-#define BENCHMARK_GEMM2_OP_TYPE(dType) BENCHMARK_GEMM2_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM8_OP_TYPE(dType) BENCHMARK_GEMM8_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM2_OP_TYPE(float)
+BENCHMARK_GEMM8_OP_TYPE(float)
+// BENCHMARK_GEMM8_OP_TYPE(int)

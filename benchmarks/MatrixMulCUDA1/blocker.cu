@@ -16,11 +16,14 @@ __global__ void gemm_kernel1(int m, int n, int k, T *a, T *b, T *c) {
 
   T sum = 0.f;
 
+  // if k = 1024, block(16, 16)
+  // for(1024/16):
+  //   sum += FMA(16)
+  __shared__ T ashare[BLOCK][BLOCK];
+  __shared__ T bshare[BLOCK][BLOCK];
+
   for (T *a_ptr = begin_a, *b_ptr = begin_b; a_ptr < end_a;
        a_ptr += BLOCK, b_ptr += BLOCK * n) {
-    __shared__ T ashare[BLOCK][BLOCK];
-    __shared__ T bshare[BLOCK][BLOCK];
-
     ashare[ty][tx] = a_ptr[ty * k + tx];
     bshare[ty][tx] = b_ptr[ty * n + tx];
     __syncthreads();
