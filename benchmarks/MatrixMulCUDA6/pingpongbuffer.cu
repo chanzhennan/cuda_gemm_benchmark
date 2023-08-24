@@ -1,4 +1,4 @@
-#include "MatrixMulCUDA6/pingpangbuffer.cuh"
+#include "MatrixMulCUDA6/pingpongbuffer.cuh"
 
 // a = mxk, b = kxn
 template <int BLOCK, int STRIDE>

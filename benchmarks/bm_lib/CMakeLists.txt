@@ -1,4 +1,4 @@
-file(GLOB_RECURSE SRCS *.cu *.h *.hpp)
+file(GLOB_RECURSE SRCS *.cu *.h *.hpp *.cpp)
 
 if(NOT BUILD_SHARED_LIBS)
   cuda_add_library(bm_lib ${SRCS})

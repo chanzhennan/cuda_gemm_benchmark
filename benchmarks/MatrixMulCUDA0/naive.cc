@@ -10,63 +10,16 @@
 #include <stdexcept>
 #include <vector>
 
-#include "bm_lib/utils.h"
+#include "bm_lib/basegemm.h"
 
 template <typename T>
-class Naive : public benchmark::Fixture {
+class Naive : public BaseGemm {
  public:
-  void callKernel(benchmark::State &state) {
-    // call kernel
-    GEMM0<TPB>(dA, dB, dC, state.range(0), state.range(1), state.range(2));
+  void callKernel(benchmark::State &state) override {
+    GEMM0<TPB>(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
+               BaseGemm::getDeviceC(), state.range(0), state.range(1),
+               state.range(2));
   }
-
-  void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
-    // Populate array
-    unsigned long M = (unsigned long)state.range(0);
-    unsigned long N = (unsigned long)state.range(1);
-    unsigned long K = (unsigned long)state.range(2);
-    unsigned long asize = M * K;
-    unsigned long bsize = K * N;
-    unsigned long csize = M * N;
-
-    cudaMallocManaged(&dA, sizeof(T) * asize);
-    cudaMallocManaged(&dB, sizeof(T) * bsize);
-    cudaMallocManaged(&dC, sizeof(T) * csize);
-    cudaMallocManaged(&testC, sizeof(T) * csize);
-
-    cudabm::genRandom(dA, asize);
-    cudabm::genRandom(dB, bsize);
-  }
-
-  void verify(const ::benchmark::State &st) {
-    // for test M, N, K = state.range(0)
-    cudabm::Gemm(dA, dB, testC, st.range(0), st.range(1), st.range(2));
-    if (!cudabm::Equal<T>(st.range(0) * st.range(1), dC, testC, 1e-2))
-      throw std::runtime_error("Value diff occur in Dense");
-  }
-
-  void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
-    cudaFree(dA);
-    cudaFree(dB);
-    cudaFree(dC);
-    cudaFree(testC);
-  }
-
-  double getDataSize(const ::benchmark::State &state) {
-    // datasize = 2 * M * N
-    return (double)(2 * state.range(0) * state.range(1));
-  }
-
-  double getFlops(const ::benchmark::State &state) {
-    // flops =  2 * M * N * K / s
-    return (double)(2 * state.range(0) * state.range(1) * state.range(2));
-  }
-
- private:
-  T *dA, *dB;
-  T *testC, *dC;
-  long int dataSize;
-  long int flops;
 };
 
 #define BENCHMARK_GEMM0_OP(name, dType)                                \
@@ -86,4 +39,3 @@ class Naive : public benchmark::Fixture {
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM0_OP_TYPE(float)
-// BENCHMARK_GEMM1_OP_TYPE(int)

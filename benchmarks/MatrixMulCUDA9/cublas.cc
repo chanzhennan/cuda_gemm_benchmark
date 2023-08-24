@@ -88,7 +88,7 @@ class Cublas : public benchmark::Fixture {
   }                                                                    \
   BENCHMARK_REGISTER_F(Cublas, name)                                   \
       ->Unit(benchmark::kMillisecond)                                  \
-      ->ArgsProduct({{8}, {4096, 16384}, {4096, 16384}});
+      ->ArgsProduct({{1, 2}, {4096, 16384}, {4096, 16384}});
 
 #define BENCHMARK_GEMM9_OP_TYPE(dType) BENCHMARK_GEMM9_OP(Gemm_##dType, dType)
 
