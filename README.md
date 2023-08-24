@@ -33,5 +33,22 @@ C = alpha * A * B + beta * C
 
 ## TODO
 * Address the bug causing a segment fault in MatrixMulCUDA7.
-* Correct the TFlops miscalculation.
 * Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m ≠ n ≠ k.
+
+## Performance
+Run on RTX 4070 Ti | Theoretical Performance: FP32 (float) 40.09 TFLOPS
+   * Reference: [GeForce RTX 4070 Ti Specs](https://www.techpowerup.com/gpu-specs/geforce-rtx-4070-ti.c3950)
+   
+| Benchmark                                       | Time     | CPU      | Iterations | UserCounters                 |
+|-------------------------------------------------|----------|----------|------------|------------------------------|
+| Naive<float>/Gemm_float/5120/4096/4096           | 1731 ms  | 1731 ms  | 1          | TFlops=0.099244/s, operation=171.799G |
+| Blocker<float>/Gemm_float/5120/4096/4096         | 103 ms   | 103 ms   | 6          | TFlops=1.66191/s, operation=1030.79G |
+| Strider<float>/Gemm_float/5120/4096/4096         | 19.9 ms  | 19.9 ms  | 30         | TFlops=8.62941/s, operation=5.15396T |
+| Aligner<float>/Gemm_float/5120/4096/4096         | 17.3 ms  | 17.3 ms  | 33         | TFlops=9.93519/s, operation=5.66936T |
+| MultiLoader<float>/Gemm_float/5120/4096/4096     | 19.8 ms  | 19.8 ms  | 31         | TFlops=8.67294/s, operation=5.32576T |
+| BcAvoider<float>/Gemm_float/5120/4096/4096       | 24.2 ms  | 24.2 ms  | 26         | TFlops=7.10627/s, operation=4.46677T |
+| PpBuffer<float>/Gemm_float/5120/4096/4096        | 20.9 ms  | 20.9 ms  | 28         | TFlops=8.2018/s, operation=4.81036T |
+| Dense<float>/Gemm_float/5120/4096/4096           | 11.0 ms  | 11.0 ms  | 61         | TFlops=15.5654/s, operation=10.4797T |
+| Cublas<float>/Gemm_float/5120/4096/4096          | 5.95 ms  | 5.95 ms  | 115        | TFlops=28.8656/s, operation=19.7568T |
+| Yzaiustc<float>/Gemm_float/5120/4096/4096        | 7.23 ms  | 7.23 ms  | 93         | TFlops=23.765/s, operation=15.9773T |
+| Yhs<float>/Gemm_float/5120/4096/4096             | 6.78 ms  | 6.78 ms  | 100        | TFlops=25.3418/s, operation=17.1799T |
