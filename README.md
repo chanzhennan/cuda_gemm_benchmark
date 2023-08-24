@@ -1,30 +1,30 @@
 ## introduction
-A repository showcasing various features of GEMM to enhance its performance. 
+This repository showcases various features of GEMM aimed at enhancing its performance. 
 ```
 C = alpha * A * B + beta * C
 ```
-## algorithm
+## Matrix Multiplication Algorithm Implementations
 
 * MatrixMulCUDA0
-    * naive gemm implememt
+    * Naive GEMM implementation.
 * MatrixMulCUDA1
-    * using warp/block to calc FMA
+    * Utilizing warp/block for fused multiply-add (FMA) calculations.
 * MatrixMulCUDA2
-    * load stride Gmem to Smem
+    * Loading data with strides from global memory to shared memory.
 * MatrixMulCUDA3
-    * aligning shared memory
+    * Aligning shared memory for optimized memory access.
 * MatrixMulCUDA4
-    * load twice each thread
+    * Loading data twice per thread for improved data reuse.
 * MatrixMulCUDA5
-    * avoiding bankconflict
+    * Minimizing bank conflicts in shared memory accesses.
 * MatrixMulCUDA6
-    * using pingpang buffer
+    * Using ping-pong buffer strategy.
 * MatrixMulCUDA7
-    * implement fast 128*128 block gemm
+    * Implementing fast 128x128 block GEMM. (Note: A bug causing segment faults needs to be fixed.)
 * MatrixMulCUDA8
     * desen refer to https://github.com/Cjkkkk/CUDA_gemm/blob/master/src/cuda/dense.cu
 * MatrixMulCUDA9
-    * cublas implement
+    * Implementation using cuBLAS.
 * MatrixMulCUDA10
     * yzaiust refer to  https://github.com/yzhaiustc/Optimizing-SGEMM-on-NVIDIA-Turing-GPUs
 * MatrixMulCUDA11
@@ -32,7 +32,7 @@ C = alpha * A * B + beta * C
 
 
 ## TODO
-* (MatrixMulCUDA7) fix bug,  segment fault occur
-* refactor, add baseGemm class
-* fix bug, TFlops miscalc
-* fix bug, cuda0 - cuda 6 can not deal with m != n != k 
+* Address the bug causing a segment fault in MatrixMulCUDA7.
+* Refactor and introduce a baseGemm class.
+* Correct the TFlops miscalculation.
+* Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m ≠ n ≠ k.
