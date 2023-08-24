@@ -64,6 +64,12 @@ void genRandom(float* vec, unsigned long len) {
   }
 }
 
+void genOnes(float* vec, unsigned long len) {
+  for (unsigned long i = 0; i < len; i++) {
+    vec[i] = 1.f;
+  }
+}
+
 void Print(float* vec, size_t len) {
   for (int i = 0; i < len; i++) {
     printf("%f ", vec[i]);

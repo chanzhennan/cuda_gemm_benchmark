@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "MatrixMulCUDA8/dense.cuh"
+#include "MatrixMulCUDA9/cublas.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,11 +13,12 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class Dense : public benchmark::Fixture {
+class Cublas : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM8(dA, dB, dC, state.range(0), state.range(1), state.range(2));
+    GEMM9(dA, dB, dC, state.range(0), state.range(1), state.range(2),
+          blas_handle);
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -34,8 +35,11 @@ class Dense : public benchmark::Fixture {
     cudaMallocManaged(&dC, sizeof(T) * csize);
     cudaMallocManaged(&testC, sizeof(T) * csize);
 
-    cudabm::genRandom(dA, asize);
-    cudabm::genRandom(dB, bsize);
+    cublasCreate(&blas_handle);
+
+    cudabm::genOnes(dA, asize);
+    cudabm::genOnes(dB, bsize);
+    cudabm::Gemm(dA, dB, testC, state.range(0), state.range(1), state.range(2));
   }
 
   void verify(const ::benchmark::State &st) {
@@ -46,6 +50,8 @@ class Dense : public benchmark::Fixture {
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
     // verify(st);
+
+    cublasDestroy(blas_handle);
     cudaFree(dA);
     cudaFree(dB);
     cudaFree(dC);
@@ -67,10 +73,11 @@ class Dense : public benchmark::Fixture {
   T *testC, *dC;
   long int dataSize;
   long int flops;
+  cublasHandle_t blas_handle;
 };
 
-#define BENCHMARK_GEMM8_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Dense, name, dType)                      \
+#define BENCHMARK_GEMM9_OP(name, dType)                                \
+  BENCHMARK_TEMPLATE_DEFINE_F(Cublas, name, dType)                     \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -79,10 +86,10 @@ class Dense : public benchmark::Fixture {
     st.counters["FLOPS"] =                                             \
         benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Dense, name)                                    \
+  BENCHMARK_REGISTER_F(Cublas, name)                                   \
       ->Unit(benchmark::kMillisecond)                                  \
       ->ArgsProduct({{8}, {4096, 16384}, {4096, 16384}});
 
-#define BENCHMARK_GEMM8_OP_TYPE(dType) BENCHMARK_GEMM8_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM9_OP_TYPE(dType) BENCHMARK_GEMM9_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM8_OP_TYPE(float)
+BENCHMARK_GEMM9_OP_TYPE(float)

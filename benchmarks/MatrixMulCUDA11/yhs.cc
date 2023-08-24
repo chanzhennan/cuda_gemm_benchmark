@@ -1,5 +1,5 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include "MatrixMulCUDA8/dense.cuh"
+#include "MatrixMulCUDA11/yhs.cuh"
 
 #include <benchmark/benchmark.h>
 
@@ -13,11 +13,11 @@
 #include "bm_lib/utils.h"
 
 template <typename T>
-class Dense : public benchmark::Fixture {
+class Yhs : public benchmark::Fixture {
  public:
   void callKernel(benchmark::State &state) {
     // call kernel
-    GEMM8(dA, dB, dC, state.range(0), state.range(1), state.range(2));
+    GEMM11(dA, dB, dC, state.range(0), state.range(1), state.range(2));
   }
 
   void SetUp(const ::benchmark::State &state) BENCHMARK_OVERRIDE {
@@ -34,8 +34,11 @@ class Dense : public benchmark::Fixture {
     cudaMallocManaged(&dC, sizeof(T) * csize);
     cudaMallocManaged(&testC, sizeof(T) * csize);
 
-    cudabm::genRandom(dA, asize);
-    cudabm::genRandom(dB, bsize);
+    // memset(dA, 1, sizeof(T) * asize);
+    // memset(dB, 1, sizeof(T) * bsize);
+
+    cudabm::genOnes(dA, asize);
+    cudabm::genOnes(dB, bsize);
   }
 
   void verify(const ::benchmark::State &st) {
@@ -46,6 +49,7 @@ class Dense : public benchmark::Fixture {
 
   void TearDown(const ::benchmark::State &st) BENCHMARK_OVERRIDE {
     // verify(st);
+
     cudaFree(dA);
     cudaFree(dB);
     cudaFree(dC);
@@ -69,8 +73,8 @@ class Dense : public benchmark::Fixture {
   long int flops;
 };
 
-#define BENCHMARK_GEMM8_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Dense, name, dType)                      \
+#define BENCHMARK_GEMM11_OP(name, dType)                               \
+  BENCHMARK_TEMPLATE_DEFINE_F(Yhs, name, dType)                        \
   (benchmark::State & st) {                                            \
     for (auto _ : st) {                                                \
       callKernel(st);                                                  \
@@ -79,10 +83,10 @@ class Dense : public benchmark::Fixture {
     st.counters["FLOPS"] =                                             \
         benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
   }                                                                    \
-  BENCHMARK_REGISTER_F(Dense, name)                                    \
+  BENCHMARK_REGISTER_F(Yhs, name)                                      \
       ->Unit(benchmark::kMillisecond)                                  \
       ->ArgsProduct({{8}, {4096, 16384}, {4096, 16384}});
 
-#define BENCHMARK_GEMM8_OP_TYPE(dType) BENCHMARK_GEMM8_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM11_OP_TYPE(dType) BENCHMARK_GEMM11_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM8_OP_TYPE(float)
+BENCHMARK_GEMM11_OP_TYPE(float)

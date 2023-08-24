@@ -31,6 +31,7 @@ std::string strFormat(const char* format, ...);
 
 void genRandom(std::vector<float>& vec);
 void genRandom(float* vec, unsigned long len);
+void genOnes(float* vec, unsigned long len);
 void Print(float* vec, size_t len);
 float Sum(float* vec, size_t len);
 
