@@ -33,6 +33,5 @@ C = alpha * A * B + beta * C
 
 ## TODO
 * Address the bug causing a segment fault in MatrixMulCUDA7.
-* Refactor and introduce a baseGemm class.
 * Correct the TFlops miscalculation.
 * Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m ≠ n ≠ k.
