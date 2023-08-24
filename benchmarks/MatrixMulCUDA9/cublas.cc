@@ -4,6 +4,7 @@
 #include <benchmark/benchmark.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -37,8 +38,8 @@ class Cublas : public benchmark::Fixture {
 
     cublasCreate(&blas_handle);
 
-    cudabm::genOnes(dA, asize);
-    cudabm::genOnes(dB, bsize);
+    cudabm::genRandom(dA, asize);
+    cudabm::genRandom(dB, bsize);
     cudabm::Gemm(dA, dB, testC, state.range(0), state.range(1), state.range(2));
   }
 
@@ -76,19 +77,20 @@ class Cublas : public benchmark::Fixture {
   cublasHandle_t blas_handle;
 };
 
-#define BENCHMARK_GEMM9_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Cublas, name, dType)                     \
-  (benchmark::State & st) {                                            \
-    for (auto _ : st) {                                                \
-      callKernel(st);                                                  \
-    }                                                                  \
-    st.counters["DATASIZE"] = getDataSize(st);                         \
-    st.counters["FLOPS"] =                                             \
-        benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
-  }                                                                    \
-  BENCHMARK_REGISTER_F(Cublas, name)                                   \
-      ->Unit(benchmark::kMillisecond)                                  \
-      ->ArgsProduct({{1, 2}, {4096, 16384}, {4096, 16384}});
+#define BENCHMARK_GEMM9_OP(name, dType)                                      \
+  BENCHMARK_TEMPLATE_DEFINE_F(Cublas, name, dType)                           \
+  (benchmark::State & st) {                                                  \
+    for (auto _ : st) {                                                      \
+      callKernel(st);                                                        \
+    }                                                                        \
+    double iter = st.iterations();                                           \
+    st.counters["operation"] = getFlops(st) * iter;                          \
+    st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
+                                               benchmark::Counter::kIsRate); \
+  }                                                                          \
+  BENCHMARK_REGISTER_F(Cublas, name)                                         \
+      ->Unit(benchmark::kMillisecond)                                        \
+      ->ArgsProduct({{5120}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM9_OP_TYPE(dType) BENCHMARK_GEMM9_OP(Gemm_##dType, dType)
 

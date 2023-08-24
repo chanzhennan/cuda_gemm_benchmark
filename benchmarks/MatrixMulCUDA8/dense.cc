@@ -23,20 +23,21 @@ class Dense : public BaseGemm {
   }
 };
 
-#define BENCHMARK_GEMM8_OP(name, dType)                                \
-  BENCHMARK_TEMPLATE_DEFINE_F(Dense, name, dType)                      \
-  (benchmark::State & st) {                                            \
-    for (auto _ : st) {                                                \
-      callKernel(st);                                                  \
-    }                                                                  \
-    st.counters["DATASIZE"] = getDataSize(st);                         \
-    st.counters["FLOPS"] =                                             \
-        benchmark::Counter(getFlops(st), benchmark::Counter::kIsRate); \
-  }                                                                    \
-  BENCHMARK_REGISTER_F(Dense, name)                                    \
-      ->Unit(benchmark::kMillisecond)                                  \
-      ->ArgsProduct({{1, 2}, {4096, 16384}, {4096, 16384}});
+#define BENCHMARK_GEMM9_OP(name, dType)                                      \
+  BENCHMARK_TEMPLATE_DEFINE_F(Dense, name, dType)                            \
+  (benchmark::State & st) {                                                  \
+    for (auto _ : st) {                                                      \
+      callKernel(st);                                                        \
+    }                                                                        \
+    double iter = st.iterations();                                           \
+    st.counters["operation"] = getFlops(st) * iter;                          \
+    st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
+                                               benchmark::Counter::kIsRate); \
+  }                                                                          \
+  BENCHMARK_REGISTER_F(Dense, name)                                          \
+      ->Unit(benchmark::kMillisecond)                                        \
+      ->ArgsProduct({{5120}, {4096}, {4096}});
 
-#define BENCHMARK_GEMM8_OP_TYPE(dType) BENCHMARK_GEMM8_OP(Gemm_##dType, dType)
+#define BENCHMARK_GEMM9_OP_TYPE(dType) BENCHMARK_GEMM9_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM8_OP_TYPE(float)
+BENCHMARK_GEMM9_OP_TYPE(float)

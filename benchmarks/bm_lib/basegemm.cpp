@@ -61,5 +61,5 @@ double BaseGemm::getDataSize(const ::benchmark::State &state) {
 
 double BaseGemm::getFlops(const ::benchmark::State &state) {
   // flops =  2 * M * N * K / s
-  return (double)(2 * state.range(0) * state.range(1) * state.range(2));
+  return (double)(2 * long(state.range(0)) * state.range(1) * state.range(2));
 }
