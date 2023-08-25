@@ -5,6 +5,10 @@ project(
   DESCRIPTION "gemm benchmark"
   LANGUAGES CXX)
 
+if(NOT DEFINED CUDA_ARCH)
+  message(FATAL_ERROR "CUDA_ARCH macro is not defined. Please set CUDA_ARCH.")
+endif()
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})

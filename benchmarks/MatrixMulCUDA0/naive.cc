@@ -41,5 +41,3 @@ class Naive : public BaseGemm {
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM0_OP_TYPE(float)
-
-// benchmark::Counter(getFlops(st) * st.iterations(), benchmark::Counter::kIsRate); \

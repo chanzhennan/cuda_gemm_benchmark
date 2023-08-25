@@ -30,7 +30,7 @@ list(
   MatrixMulCUDA11/yhs.cu)
 
 cuda_add_executable(cuda_benchmark ${SOURCE_FILES})
-set_property(TARGET cuda_benchmark PROPERTY CUDA_ARCHITECTURES 89)
+set_property(TARGET cuda_benchmark PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 target_link_libraries(cuda_benchmark bm_lib cublas)
 
 install(TARGETS cuda_benchmark RUNTIME)
