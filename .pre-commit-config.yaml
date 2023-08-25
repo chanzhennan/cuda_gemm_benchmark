@@ -21,12 +21,12 @@ repos:
       - id: clang-format
         args: ["--style=Google", "-i"]
         types_or: [c++, c, c#, cuda, json, objective-c, proto]
-      # - id: clang-tidy
-      # - id: oclint
-      # - id: uncrustify
-      # - id: cppcheck
-      # - id: cpplint
-      # - id: include-what-you-use
+      - id: clang-tidy
+      - id: oclint
+      - id: uncrustify
+      - id: cppcheck
+      - id: cpplint
+      - id: include-what-you-use
   - repo: https://github.com/chanzhennan/cmake-format-precommit
     rev: v0.6.13
     hooks:
