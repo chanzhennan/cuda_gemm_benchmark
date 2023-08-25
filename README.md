@@ -1,4 +1,4 @@
-## introduction
+## Introduction
 This repository showcases various features of GEMM aimed at enhancing its performance. 
 ```
 C = alpha * A * B + beta * C
@@ -30,8 +30,15 @@ C = alpha * A * B + beta * C
 * MatrixMulCUDA11
     * yinghan resfer to https://github.com/Yinghan-Li/YHs_Sample/blob/master/cuda/gemm/sgemm.cu
 
+#
+## Installation
+* Edit build.sh file
+   * cmake -DCUDA_ARCH=/your/cuda/arch -DCUDA_TOOLKIT_ROOT_DIR=/local/cuda/path
+* bash build.sh
+#
 
-## TODO
+
+## Todo
 * Address the bug causing a segment fault in MatrixMulCUDA7.
 * Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m ≠ n ≠ k.
 
