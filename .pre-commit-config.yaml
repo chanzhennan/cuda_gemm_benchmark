@@ -3,9 +3,15 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.1.0
     hooks:
-      - id: check-yaml
-      - id: end-of-file-fixer
       - id: trailing-whitespace
+        exclude: \.output
+      - id: end-of-file-fixer
+        exclude: \.(cp?p?$|output)
+      - id: check-yaml
+      - id: check-docstring-first
+      - id: check-added-large-files
+      - id: debug-statements
+      - id: requirements-txt-fixer
   - repo: https://github.com/psf/black
     rev: 22.3.0
     hooks:
@@ -15,18 +21,16 @@ repos:
   #   rev: 5.10.1
   #   hooks:
   #     - id: isort
+  - repo: https://github.com/pre-commit/pre-commit
+    rev: v2.16.0
+    hooks:
+    -   id: validate_manifest
   - repo: https://github.com/chanzhennan/pre-commit-hooks
     rev: v1.3.5
     hooks:
       - id: clang-format
         args: ["--style=Google", "-i"]
         types_or: [c++, c, c#, cuda, json, objective-c, proto]
-      - id: clang-tidy
-      - id: oclint
-      - id: uncrustify
-      - id: cppcheck
-      - id: cpplint
-      - id: include-what-you-use
   - repo: https://github.com/chanzhennan/cmake-format-precommit
     rev: v0.6.13
     hooks:

@@ -1,3 +1,4 @@
+// Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
 #include "MatrixMulCUDA0/naive.cuh"
 
 template <typename T>
