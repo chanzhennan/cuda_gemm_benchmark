@@ -35,12 +35,12 @@ C = alpha * A * B + beta * C
 * Edit build.sh file
    * cmake -DCUDA_ARCH=/your/cuda/arch -DCUDA_TOOLKIT_ROOT_DIR=/local/cuda/path
 * bash build.sh
+  
+  
+ ![image](https://github.com/chanzhennan/cuda_gemm_benchmark/assets/7290453/e879009a-475e-4f05-9e51-7771d3d5b765)
+  |---------------------------------------------------------------------------------------------------------------|
+
 #
-
-
-## Todo
-* Address the bug causing a segment fault in MatrixMulCUDA7.
-* Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m ≠ n ≠ k.
 
 ## Performance
 Run on RTX 4070 Ti | Theoretical Performance: FP32 (float) 40.09 TFLOPS
@@ -59,3 +59,10 @@ Run on RTX 4070 Ti | Theoretical Performance: FP32 (float) 40.09 TFLOPS
 | Cublas<float>/Gemm_float/5120/4096/4096          | 5.95 ms  | 5.95 ms  | 115        | TFlops=28.8656/s, operation=19.7568T |
 | Yzaiustc<float>/Gemm_float/5120/4096/4096        | 7.23 ms  | 7.23 ms  | 93         | TFlops=23.765/s, operation=15.9773T |
 | Yhs<float>/Gemm_float/5120/4096/4096             | 6.78 ms  | 6.78 ms  | 100        | TFlops=25.3418/s, operation=17.1799T |
+
+
+
+## Todo
+* Address the bug causing a segment fault in MatrixMulCUDA7.
+* Fix the issue where CUDA implementations 0 to 6 cannot handle cases where m = 8 n = 4096 k = 4096.
+
