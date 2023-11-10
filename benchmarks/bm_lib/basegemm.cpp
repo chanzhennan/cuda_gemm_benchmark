@@ -28,8 +28,8 @@ void BaseGemm::genData(const ::benchmark::State &st) {
   unsigned long asize = M * K;
   unsigned long bsize = K * N;
 
-  cudabm::genOnes(dA, asize);
-  cudabm::genOnes(dB, bsize);
+  cudabm::genRandom(dA, asize);
+  cudabm::genRandom(dB, bsize);
 }
 
 float *BaseGemm::getDeviceA() { return dA; }
