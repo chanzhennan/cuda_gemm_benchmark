@@ -17,43 +17,98 @@
 template <typename T>
 class Czn : public BaseGemm {
  public:
-  void callKernel(benchmark::State &state) override {
+  void callKernel(benchmark::State& state) override {
     GEMM12(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
            BaseGemm::getDeviceC(), state.range(0), state.range(1),
            state.range(2));
   }
 
-
-  void myprint(benchmark::State &state)
-  {
+  void myprint2(benchmark::State& state) {
     int m = state.range(0);
     int n = state.range(1);
     int k = state.range(2);
 
+    // float* a = BaseGemm::getDeviceA();
+    // float* b = BaseGemm::getDeviceB();
+    float* c = BaseGemm::getDeviceC();
 
-    float* b = BaseGemm::getDeviceB();
-    float* a = BaseGemm::getDeviceA();
-    
-    printf("bbbbbbbbb\n\n");  
-    for (int i = 0; i < 128; i++)
-    {
-      printf("%.2f ", b[i]);
+    printf("\n");
+    printf("\n");
+    printf("(cc) m * k \n\n");
+    for (int j = 0; j < 8; j++) {
+      for (int i = 0; i < 8; i++) {
+        printf("%.2f ", c[j * k + i]);
+      }
+      printf("\n");
     }
-    printf("\n\n");  
-
-
-    printf("aaaaa ");
-    for (int i = 0; i < 128; i++)
-    {
-      printf("%.2f ", a[i * k]);
-    }
-    printf("\n\n");  
-    
   }
-  
 
+  void myprint1(benchmark::State& state) {
+    int m = state.range(0);
+    int n = state.range(1);
+    int k = state.range(2);
+
+    float* a = BaseGemm::getDeviceA();
+    float* b = BaseGemm::getDeviceB();
+
+    printf("\n");
+    printf("\n");
+    printf("(aa) m * k \n\n");
+    for (int j = 0; j < 128; j++) {
+      printf("%.2f ", a[j * k]);
+    }
+    printf("\n");
+
+    printf("\n\n (bb) k * n \n\n");
+    for (int j = 0; j < 128; j++) {
+      printf("%.2f ", b[j]);
+    }
+    printf("\n");
+  }
+
+  void myprint(benchmark::State& state) {
+    int m = state.range(0);
+    int n = state.range(1);
+    int k = state.range(2);
+    printf("m = %d n = %d k = %d\n", m, n, k);
+
+    float* a = BaseGemm::getDeviceA();
+    float* b = BaseGemm::getDeviceB();
+    /*
+     *      A 8
+     *     ｜----｜
+     *     ｜    ｜
+     *     ｜    ｜ 128
+     *     ｜    ｜
+     *     ｜    ｜
+     *     ｜----｜
+     */
+    printf("(aa) m * k \n\n");
+    for (int j = 0; j < 8; j++) {
+      for (int i = 0; i < 8; i++) {
+        printf("%.2f ", a[j + i * k]);
+      }
+      printf("\n");
+    }
+
+    /*
+     *      B      8
+     *     ｜--------------|
+     *     ｜              ｜128
+     *     ｜--------------|
+     */
+
+    printf("\n\n (bb) k * n \n\n");
+    for (int j = 0; j < 8; j++) {
+      for (int i = 0; i < 8; i++) {
+        printf("%.2f ", b[j * n + i]);
+      }
+      printf("\n");
+    }
+    printf("\n");
+    printf("\n");
+  }
 };
-
 
 #define BENCHMARK_GEMM12_OP(name, dType)                                     \
   BENCHMARK_TEMPLATE_DEFINE_F(Czn, name, dType)                              \
@@ -61,7 +116,7 @@ class Czn : public BaseGemm {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
-    myprint(st);                                                                \
+    myprint2(st);                                                            \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -70,7 +125,7 @@ class Czn : public BaseGemm {
   BENCHMARK_REGISTER_F(Czn, name)                                            \
       ->Unit(benchmark::kMillisecond)                                        \
       ->Iterations(1)                                                        \
-      ->ArgsProduct({{5120}, {4096}, {4096}});
+      ->ArgsProduct({{128}, {128}, {8}});
 
 #define BENCHMARK_GEMM12_OP_TYPE(dType) BENCHMARK_GEMM12_OP(Gemm_##dType, dType)
 

@@ -6,31 +6,6 @@
 
 #include "MatrixMulCUDA11/yhs.cuh"
 
-void random_init(float *data, size_t size) {
-  for (size_t i = 0; i < size; ++i) {
-    data[i] = float(rand()) / RAND_MAX;
-  }
-}
-
-bool check(const float *A, const float *B, const float *C, int m, int n,
-           int k) {
-  for (int i = 0; i < m; ++i) {
-    for (int j = 0; j < n; ++j) {
-      float sum = 0.f;
-      for (int p = 0; p < k; ++p) {
-        sum += A[i * k + p] * B[j + p * n];
-      }
-
-      if (std::fabs(sum - C[i * n + j]) / std::fabs(sum) > 1e-5f) {
-        printf("C[%d][%d] not match, %f vs %f\n", i, j, sum, C[i * n + j]);
-        return false;
-      }
-    }
-  }
-
-  return true;
-}
-
 __device__ __forceinline__ uint32_t smem_u32addr(const void *smem_ptr) {
   uint32_t addr;
   asm("{.reg .u64 u64addr;\n"
@@ -73,15 +48,13 @@ __device__ __forceinline__ void ldg32_nc_0(float &reg, const void *ptr,
       : "l"(ptr), "r"((int)guard));
 }
 
-
 __device__ __forceinline__ void ldg128(float &reg0, float &reg1, float &reg2,
-                                            float &reg3, const void *ptr, bool guard) {
-  asm volatile(
-      "ld.global.v4.f32 {%0, %1, %2, %3}, [%4];\n"
-      : "=f"(reg0), "=f"(reg1), "=f"(reg2), "=f"(reg3)
-      : "l"(ptr), "r"((int)guard));
+                                       float &reg3, const void *ptr,
+                                       bool guard) {
+  asm volatile("ld.global.v4.f32 {%0, %1, %2, %3}, [%4];\n"
+               : "=f"(reg0), "=f"(reg1), "=f"(reg2), "=f"(reg3)
+               : "l"(ptr), "r"((int)guard));
 }
-
 
 __device__ __forceinline__ void stg32(const float &reg, void *ptr, bool guard) {
   asm volatile(
@@ -125,29 +98,6 @@ struct StgFrag {
     }
   }
 };
-
-__device__ __noinline__ void C_tile_wb(StgFrag C_frag, float *C_stg_ptr,
-                                       const float *C_lds_ptr,
-                                       uint32_t C_sts_addr, uint32_t m,
-                                       uint32_t n, uint32_t m_idx,
-                                       uint32_t n_idx) {
-  __syncthreads();
-
-#pragma unroll
-  for (int i = 0; i < 4; ++i) {
-    sts128(C_frag.data[i][0], C_frag.data[i][1], C_frag.data[i][2],
-           C_frag.data[i][3], C_sts_addr + i * 8 * sizeof(float4));
-  }
-
-  __syncthreads();
-
-  uint32_t m_guard = m < m_idx ? 0 : m - m_idx;
-
-#pragma unroll
-  for (int i = 0; i < 16; ++i) {
-    stg32(C_lds_ptr[i * 32], C_stg_ptr + i * n, i < m_guard && n_idx < n);
-  }
-}
 
 /*
  * matrix A, B and C: row-major
@@ -194,7 +144,7 @@ __device__ __noinline__ void C_tile_wb(StgFrag C_frag, float *C_stg_ptr,
  *  --|---|-- |---|---|---|---|---|---|---|---||---|---------------------------|
  *    |///|4    |t0 |t2 |t4 |t6 |t8 |t10|t12|t14||t0 | |
  *    |---|--   |---|---|---|---|---|---|---|---||---| | |   |     |t1 |t3 |t5
- * |t7 |t9 |t11|t13|t15||                               | 16|---|
+ *              |t7 |t9 |t11|t13|t15||                               | 16|---|
  * |---|---|---|---|---|---|---|---||                               | |   |
  * |t16|t18|t20|t22|t24|t26|t28|t30||                               |
  *    |---|     |---|---|---|---|---|---|---|---|| | |   |
@@ -207,7 +157,58 @@ __device__ __noinline__ void C_tile_wb(StgFrag C_frag, float *C_stg_ptr,
  *    |---| |-------------------------------||-------------------------------|
  *
  */
-__global__ __launch_bounds__(256, 2) void sgemm_128x128x8_kernel(
+
+__device__ void debugShd(float *A_smem, float *B_smem) {
+  if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
+    printf("\nkernel A\n ");
+    for (int i = 0; i < 132; i++) {
+      printf("%.2f ", A_smem[i]);
+    }
+    printf("\n ");
+    printf("\nkernel B\n ");
+    for (int i = 0; i < 132; i++) {
+      printf("%.2f ", B_smem[i]);
+    }
+    printf("\n ");
+  }
+}
+
+__device__ void debugReg(float **A_frag, float **B_frag, uint32_t A_lds_addr,
+                         uint32_t B_lds_addr, float *B_smem, float *A_smem) {
+  int k_frag = 1;
+  int next_frag = (k_frag + 1) % 2;
+
+  lds128(A_frag[next_frag][0], A_frag[next_frag][1], A_frag[next_frag][2],
+         A_frag[next_frag][3],
+         A_lds_addr + (k_frag + 1) % 8 * 132 * sizeof(float));
+  lds128(A_frag[next_frag][4], A_frag[next_frag][5], A_frag[next_frag][6],
+         A_frag[next_frag][7],
+         A_lds_addr + ((k_frag + 1) % 8 * 132 + 4) * sizeof(float));
+  lds128(B_frag[next_frag][0], B_frag[next_frag][1], B_frag[next_frag][2],
+         B_frag[next_frag][3],
+         B_lds_addr + (k_frag + 1) % 8 * 128 * sizeof(float));
+  lds128(B_frag[next_frag][4], B_frag[next_frag][5], B_frag[next_frag][6],
+         B_frag[next_frag][7],
+         B_lds_addr + ((k_frag + 1) % 8 * 128 + 4) * sizeof(float));
+
+  __syncthreads();
+
+  if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
+    printf("\n1111kernel A reg\n ");
+    for (int i = 0; i < 8; i++) {
+      printf("%.2f ", B_frag[next_frag][i]);
+    }
+
+    for (int j = 0; j < 8; j++) {
+      printf("xx %.2f ", B_smem[128 + j]);
+    }
+
+    printf("\n ");
+  }
+}
+
+// A(k * n) B(m * k)
+__global__ __launch_bounds__(256, 2) void sgemm_128x128x8_kernel_my(
     const float *A, const float *B, float *C, uint32_t m, uint32_t n,
     uint32_t k,
     uint32_t A_ldg_step,    // k * sizeof(float)
@@ -239,351 +240,311 @@ __global__ __launch_bounds__(256, 2) void sgemm_128x128x8_kernel(
     }
   }
 
-  const char * A_gmem = (const char *)(A +  k * (blockIdx.y * 128 + (threadIdx.x / 8) * 4) + (threadIdx.x % 8) );
-  const char * B_gmem = (const char *)(B + (threadIdx.x / 32) * n + blockIdx.x * 128 + (threadIdx.x % 32) * 4);
+  if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
+    printf("m = %d n = %d k = %d \n", m, n, k);
+  }
 
+  const char *A_gmem =
+      (const char *)(A + k * (blockIdx.y * 128 + (threadIdx.x / 8) * 4) +
+                     (threadIdx.x % 8));
+  const char *B_gmem =
+      (const char *)(B + (threadIdx.x / 32) * n + blockIdx.x * 128 +
+                     (threadIdx.x % 32) * 4);
 
-  // shared ptr 
-  uint32_t A_sts_addr = smem_u32addr(A_smem + (threadIdx.x % 8) * 132 + (threadIdx.x / 8) * 4);
-  uint32_t B_sts_addr = smem_u32addr(B_smem + (threadIdx.x / 32) * 128 + (threadIdx.x % 32) * 4);
+  int warp_xth = threadIdx.x / 32;
+  int thread_xth = threadIdx.x % 32;
 
-  // uint32_t A_lds_addr = smem_u32addr(A_smem + (warp_id / 2) * 32 + mma_tid_y * 4);
-  // uint32_t B_lds_addr = smem_u32addr(B_smem + (warp_id % 2) * 64 + mma_tid_x * 4);
+  int thread_xth_in_a = thread_xth / 8;
+  int thread_xth_in_b = thread_xth % 8;
 
+  // 4x8 threads each warp for FFMA
+  const uint32_t mma_tid_x = (thread_xth / 2) % 8;
+  const uint32_t mma_tid_y = (thread_xth / 16) * 2 + (thread_xth % 2);
+
+  // shared ptr
+  uint32_t A_sts_addr =
+      smem_u32addr(A_smem + (threadIdx.x % 8) * 132 + (threadIdx.x / 8) * 4);
+  uint32_t B_sts_addr =
+      smem_u32addr(B_smem + (threadIdx.x / 32) * 128 + (threadIdx.x % 32) * 4);
+
+  // uint32_t A_lds_addr = smem_u32addr(A_smem + (warp_xth / 2) * 32 +
+  // thread_xth_in_a * 8); uint32_t B_lds_addr = smem_u32addr(B_smem + (warp_xth
+  // % 2) * 64 + thread_xth_in_b * 8);
+
+  uint32_t A_lds_addr =
+      smem_u32addr(A_smem + (warp_xth / 2) * 32 + mma_tid_y * 4);
+  uint32_t B_lds_addr =
+      smem_u32addr(B_smem + (warp_xth % 2) * 64 + mma_tid_x * 4);
+
+  // (lane_id / 16) * 2 + (lane_id % 2)
 
   uint32_t A_ldg_guard = 0;
-  #pragma unroll
-    int m_idx = blockIdx.y * 128 + (threadIdx.x / 8) * 4;
-      for (int i = 0; i < 4; ++i) {
-        if (m_idx + i < m) {
-          A_ldg_guard |= (1u << i);
-      }
+#pragma unroll
+  int m_idx = blockIdx.y * 128 + (threadIdx.x / 8) * 4;
+  for (int i = 0; i < 4; ++i) {
+    if (m_idx + i < m) {
+      A_ldg_guard |= (1u << i);
     }
+  }
 
   uint32_t B_ldg_guard = 0;
-  #pragma unroll
-    for (int i = 0; i < 4; ++i) {
-      int n_idx = blockIdx.x * 128 + (threadIdx.x % 32) * 4 + i;
-      if (n_idx < n) {
-        B_ldg_guard |= (1u << i);
-      }
+#pragma unroll
+  for (int i = 0; i < 4; ++i) {
+    int n_idx = blockIdx.x * 128 + (threadIdx.x % 32) * 4 + i;
+    if (n_idx < n) {
+      B_ldg_guard |= (1u << i);
     }
-
-  // load 1'st tile to shared memory
-  uint32_t k_tiles = (k + 7) / 8 - 1;
-  uint32_t first_k_tile = k - k_tiles * 8;
-
-  float A_ldg_reg[4];
-  float B_ldg_reg[4];
-
-  ldg128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3], A_gmem, A_ldg_guard);
-
- 
-  ldg128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3], B_gmem, B_ldg_guard);
-
-  sts128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3], B_sts_addr);
-
-
-  for (int i = 0; i < 4; i++)
-  {
-    bool guard = (A_ldg_guard & (1u << i)) != 0 && threadIdx.x % 8 < k;
-    ldg32_nc_0(A_ldg_reg[i], A_gmem + i * k * sizeof(float), guard);
   }
-  sts128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3], A_sts_addr);
 
   __syncthreads();
 
+  uint32_t k_tiles = (k + 7) / 8 - 1;
+  uint32_t first_k_tile = k - k_tiles * 8;
+  float A_ldg_reg[4];
+  float B_ldg_reg[4];
 
-
-  if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x < 2)
+  //  gmem(1) -> smem(1)
   {
-    float * a_g = (float*)A_gmem;
-    printf("AA rrrr tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3]);
-    printf("AA gggg tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, a_g[0 + threadIdx.x], a_g[1 * k + threadIdx.x], a_g[2 * k + threadIdx.x], a_g[3 * k + threadIdx.x]);
-    // printf("AA ssss tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3]);
-    printf("AAssss2 tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, A_smem[0], A_smem[1], A_smem[2], A_smem[3]);
-  
-    // float * b_g = (float*)B_gmem;
-    // printf("BB rrrr tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3]);
-    // printf("BB gggg tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, b_g[0], b_g[1], b_g[2], b_g[3]);
-    // // printf("BB ssss tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3]);
-    // printf("BB ssss2 tid = %d %.2f %.2f %.2f %.2f\n", threadIdx.x, B_smem[0], B_smem[1], B_smem[2], B_smem[3]);
-    // printf("BB shared addr tid =%d addr = %d\n", threadIdx.x,(threadIdx.x / 32) * 128 + (threadIdx.x % 32) * 4);
+    ldg128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3], B_gmem,
+           B_ldg_guard);
+    sts128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3], B_sts_addr);
+
+    for (int i = 0; i < 4; i++) {
+      bool guard = (A_ldg_guard & (1u << i)) != 0 && threadIdx.x % 8 < k;
+      ldg32_nc_0(A_ldg_reg[i], A_gmem + i * k * sizeof(float), guard);
+    }
+    sts128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3], A_sts_addr);
+
+    __syncthreads();
+
+    // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+    //   printf("kernel A_ldg_reg %f %f %f %f \n",A_ldg_reg[0], A_ldg_reg[1],
+    //   A_ldg_reg[2], A_ldg_reg[3]); printf("kernel A_gmem %f %f %f %f \n",A[0
+    //   * n], A[1 * n], A[2 * n], A[3 * n]);
+    // }
+
+    // switch double buffer
+    A_sts_addr ^= 0x2000;
+    B_sts_addr ^= 0x1000;
+
+    // ldg pointer for next tile
+    A_gmem += first_k_tile * sizeof(float);
+    B_gmem += n * first_k_tile * sizeof(float);
   }
-  
 
-  // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0)
-  // {
-  //   printf("\n\n kernel bbbbb xxxx \n\n");
-  //   for (int i = 0; i < 128; i++)
-  //   {
-  //     printf("%.2f ", B_smem[i]);
-  //   }
+  // smem(1) -> rmem(1)
+  lds128(A_frag[0][0], A_frag[0][1], A_frag[0][2], A_frag[0][3], A_lds_addr);
+  lds128(A_frag[0][4], A_frag[0][5], A_frag[0][6], A_frag[0][7],
+         A_lds_addr + 4 * sizeof(float));
 
-  //   printf("\n\n kernel aaaaa xxxx \n\n");
-  //   for (int i = 0; i < 128; i++)
-  //   {
-  //     printf("%.2f ", A_smem[i]);
+  lds128(B_frag[0][0], B_frag[0][1], B_frag[0][2], B_frag[0][3], B_lds_addr);
+  lds128(B_frag[0][4], B_frag[0][5], B_frag[0][6], B_frag[0][7],
+         B_lds_addr + 4 * sizeof(float));
+  __syncthreads();
+
+  int next_frag = 0;
+  int this_frag = 0;
+
+  __syncthreads();
+
+  // debugShd(A_smem, B_smem);
+  // debugReg((float**)A_frag, (float**)B_frag, A_lds_addr, B_lds_addr);
+  for (int k_frag = 0; k_frag < 8; k_frag++) {
+    next_frag = (k_frag + 1) % 2;
+    this_frag = (k_frag) % 2;
+
+    if (k_frag < 7) {
+      lds128(A_frag[next_frag][0], A_frag[next_frag][1], A_frag[next_frag][2],
+             A_frag[next_frag][3],
+             A_lds_addr + (k_frag + 1) % 8 * 132 * sizeof(float));
+
+      lds128(A_frag[next_frag][4], A_frag[next_frag][5], A_frag[next_frag][6],
+             A_frag[next_frag][7],
+             A_lds_addr + ((k_frag + 1) % 8 * 132 + 4) * sizeof(float));
+
+      lds128(B_frag[next_frag][0], B_frag[next_frag][1], B_frag[next_frag][2],
+             B_frag[next_frag][3],
+             B_lds_addr + (k_frag + 1) % 8 * 128 * sizeof(float));
+      lds128(B_frag[next_frag][4], B_frag[next_frag][5], B_frag[next_frag][6],
+             B_frag[next_frag][7],
+             B_lds_addr + ((k_frag + 1) % 8 * 128 + 4) * sizeof(float));
+    }
+
+    // calc
+    // FFMA loop
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+#pragma unroll
+      for (int j = 0; j < 8; ++j) {
+        C_frag[i][j] += A_frag[this_frag][i] * B_frag[this_frag][j];
+      }
+    }
+  }
+
+  __syncthreads();
+
+  if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        printf("%.2f ", C_frag[i][j]);
+      }
+      printf("\n");
+    }
+  }
+
+  __syncthreads();
+
+  // for (; k_tiles > 0; --k_tiles) {
+  //   for (int k_frag = 0; k_frag < 8; ++k_frag) {
+  //     next_frag = next_frag;
+  //     this_frag = k_frag % 2;
+  //     if (k_frag == 0) {
+  //       // Gmem(2) -> TReg(2)
+  //       ldg128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3],
+  //       A_gmem, A_ldg_guard); ldg128(B_ldg_reg[0], B_ldg_reg[1],
+  //       B_ldg_reg[2], B_ldg_reg[3], B_gmem, B_ldg_guard);
+  //     }
+
+  //     // shared(2) -> reg(2)
+  //     lds128(A_frag[next_frag][0], A_frag[next_frag][1],
+  //     A_frag[next_frag][2], A_frag[next_frag][3], A_lds_addr);
+  //     lds128(A_frag[next_frag][4], A_frag[next_frag][5],
+  //     A_frag[next_frag][6], A_frag[next_frag][7], A_lds_addr + 4 *
+  //     sizeof(float));
+
+  //     lds128(B_frag[next_frag][0], B_frag[next_frag][1],
+  //     B_frag[next_frag][2], B_frag[next_frag][3], B_lds_addr);
+  //     lds128(B_frag[next_frag][4], B_frag[next_frag][5],
+  //     B_frag[next_frag][6], B_frag[next_frag][7], B_lds_addr + 4 *
+  //     sizeof(float));
+
+  //     // 1. TReg(2) -> shared(2)
+  //     // 2. synch()
+  //     // 3. rotated buff
+  //     // 4. update global ptr
+  //     if (k_frag == 7){
+  //       sts128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3],
+  //       B_sts_addr);
+
+  //       for (int i = 0; i < 4; i++){
+  //         bool guard = (A_ldg_guard & (1u << i)) != 0 && threadIdx.x % 8 < k;
+  //         ldg32_nc_0(A_ldg_reg[i], A_gmem + i * k * sizeof(float), guard);
+  //       }
+  //       sts128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3],
+  //       A_sts_addr);
+
+  //       __syncthreads();
+
+  //       A_lds_addr ^= 0x2000;
+  //       B_lds_addr ^= 0x1000;
+  //       A_sts_addr ^= 0x2000;
+  //       B_sts_addr ^= 0x1000;
+
+  //       A_gmem += 8 * sizeof(float);
+  //       B_gmem += 8 * n * sizeof(float);
+
+  //     }
+
+  //     // Smem(2) -> Rmem(2)
+  //     lds128(A_frag[0][0], A_frag[0][1], A_frag[0][2], A_frag[0][3],
+  //     A_lds_addr); lds128(A_frag[0][4], A_frag[0][5], A_frag[0][6],
+  //     A_frag[0][7], A_lds_addr + 4 * sizeof(float));
+
+  //     lds128(B_frag[0][0], B_frag[0][1], B_frag[0][2], B_frag[0][3],
+  //     B_lds_addr); lds128(B_frag[0][4], B_frag[0][5], B_frag[0][6],
+  //     B_frag[0][7], B_lds_addr + 4 * sizeof(float));
+
+  //     // rmem(1) -> res
+  //     for (int i = 0; i < 8; i++){
+  //       for (int j = 0; j < 8; j++){
+  //         C_frag[i][j] += A_frag[this_frag][i] * B_frag[this_frag][j];
+  //       }
+  //     }
+
   //   }
-  //   printf("\n\n");
   // }
-  
 
+  //  (k_frag + 1) % 8 * 132 * sizeof(float)
 
+  // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+  //   printf("kk \n");
 
+  //   for (int j = 0; j < 8; j++){
+  //     for (int i = 0; i < 8; i++){
+  //       printf("%.2f ", A_smem[i + 132 * j]);
+  //     }
+  //     printf("\n ");
+  //   }
 
+  //   printf("kk bb \n");
+  //   for (int j = 0; j < 8; j++){
+  //     for (int i = 0; i < 8; i++){
+  //       printf("%.2f ", B_smem[i + 128 * j]);
+  //     }
+  //     printf("\n ");
+  //   }
 
-//   const uint32_t lane_id = threadIdx.x % 32;
-//   const uint32_t warp_id = threadIdx.x / 32;
+  // }
 
-//   // 4x8 threads each warp for FFMA
-//   const uint32_t mma_tid_x = (lane_id / 2) % 8;
-//   const uint32_t mma_tid_y = (lane_id / 16) * 2 + (lane_id % 2);
+  // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+  //     printf("first_k_tile = %d k_tiles = %d \n", first_k_tile, k_tiles);
+  // }
 
-//   // A_tile & B_tile ldg pointer
-//   const char *A_ldg_ptr =
-//       (const char *)(A + (blockIdx.y * 128 + threadIdx.x / 8 * 4) * k +
-//                      threadIdx.x % 8);
-//   const char *B_ldg_ptr = (const char *)(B + (threadIdx.x / 32) * n +
-//                                          blockIdx.x * 128 + threadIdx.x % 32);
+  // lds128(A_frag[0][0], A_frag[0][1], A_frag[0][2], A_frag[0][3], A_lds_addr +
+  // (0 + 1) % 8 * 132 * sizeof(float)); lds128(A_frag[0][4], A_frag[0][5],
+  // A_frag[0][6], A_frag[0][7], A_lds_addr + ((0 + 1) % 8 * 132 + 16) *
+  // sizeof(float));
+  // __syncthreads();
 
-//   // A_tile & B_tile sts/lds pointer
-//   // using uint32_t pointer for faster double buffer switch
-//   uint32_t A_sts_addr =
-//       smem_u32addr(A_smem + (threadIdx.x % 8) * 132 + (threadIdx.x / 8) * 4);
-//   uint32_t B_sts_addr =
-//       smem_u32addr(B_smem + (threadIdx.x / 32) * 128 + (threadIdx.x % 32));
+  // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+  //     for (int i = 0; i < 8; i++){
+  //     printf("AA %f ", A_frag[0][i]);
+  //     }
+  // }
+  // __syncthreads();
 
-//   uint32_t A_lds_addr =
-//       smem_u32addr(A_smem + (warp_id / 2) * 32 + mma_tid_y * 4);
-//   uint32_t B_lds_addr =
-//       smem_u32addr(B_smem + (warp_id % 2) * 64 + mma_tid_x * 4);
+  // // FFMA for the last tile
+  // for (int k_frag = 0; k_frag < 7; ++k_frag) {
+  //   next_frag = (k_frag + 1) % 2;
+  //   this_frag = k_frag % 2;
+  //   // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+  //   //   printf("k_frag = %d\n", k_frag);
+  //   // }
+  //   if (k_frag < 7) {
+  //     // shared(2) -> reg(2)
+  //     lds128(A_frag[0][0], A_frag[0][1], A_frag[0][2], A_frag[0][3],
+  //     A_lds_addr);
+  //     // lds128(A_frag[next_frag][4], A_frag[next_frag][5],
+  //     A_frag[next_frag][6], A_frag[next_frag][7],
+  //     // A_lds_addr + ((k_frag + 1) % 8 * 132 + 16) * sizeof(float));
+  //     //  __syncthreads();
+  //     // lds128(B_frag[next_frag][0], B_frag[next_frag][1],
+  //     B_frag[next_frag][2], B_frag[next_frag][3],
+  //     // B_lds_addr + (k_frag + 1) % 8 * 128 * sizeof(float));
+  //     // lds128(B_frag[next_frag][4], B_frag[next_frag][5],
+  //     B_frag[next_frag][6], B_frag[next_frag][7],
+  //     // B_lds_addr + ((k_frag + 1) % 8 * 128 + 32) * sizeof(float));
 
-//   // ldg_guard to avoid LDG out of bound
-//   uint32_t A_ldg_guard = 0;
-// #pragma unroll
-//   for (int i = 0; i < 4; ++i) {
-//     int m_idx = blockIdx.y * 128 + threadIdx.x / 8 * 4 + i;
-//     if (m_idx < m) {
-//       A_ldg_guard |= (1u << i);
-//     }
-//   }
+  //     if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0){
+  //         for (int i = 0; i < 8; i++){
+  //           printf("AAA k_frag = %d\n");
+  //           printf("%f ", A_frag[this_frag][i]);
+  //       }
+  //     }
 
-//   uint32_t B_ldg_guard = 0;
-// #pragma unroll
-//   for (int i = 0; i < 4; ++i) {
-//     int n_idx = blockIdx.x * 128 + threadIdx.x % 32 + i * 32;
-//     if (n_idx < n) {
-//       B_ldg_guard |= (1u << i);
-//     }
-//   }
-
-//   float A_ldg_reg[4];
-//   float B_ldg_reg[4];
-
-//   // 1'st A&B tile loaded before the k_tile loop
-//   uint32_t k_tiles = (k + 7) / 8 - 1;
-
-//   // load 1'st tile to shared memory
-//   {
-//     uint32_t first_k_tile = k - k_tiles * 8;
-
-// #pragma unroll
-//     for (int i = 0; i < 4; ++i) {
-//       bool guard =
-//           (A_ldg_guard & (1u << i)) != 0 && threadIdx.x % 8 < first_k_tile;
-//       ldg32_nc_0(A_ldg_reg[i], A_ldg_ptr + i * A_ldg_step, guard);
-//     }
-
-//     sts128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3], A_sts_addr);
-
-// #pragma unroll
-//     for (int i = 0; i < 4; ++i) {
-//       bool guard =
-//           (B_ldg_guard & (1u << i)) != 0 && threadIdx.x / 32 < first_k_tile;
-//       ldg32_nc_0(B_ldg_reg[i], B_ldg_ptr + i * 32 * sizeof(float), guard);
-//     }
-
-// #pragma unroll
-//     for (int i = 0; i < 4; ++i) {
-//       sts32(B_ldg_reg[i], B_sts_addr + i * 32 * sizeof(float));
-//     }
-
-//     __syncthreads();
-
-//     // switch double buffer
-//     A_sts_addr ^= 0x2000;
-//     B_sts_addr ^= 0x1000;
-
-//     // ldg pointer for next tile
-//     A_ldg_ptr += first_k_tile * sizeof(float);
-//     B_ldg_ptr += n * first_k_tile * sizeof(float);
-//   }
-
-//   // load 1'st fragment
-//   lds128(A_frag[0][0], A_frag[0][1], A_frag[0][2], A_frag[0][3], A_lds_addr);
-//   lds128(A_frag[0][4], A_frag[0][5], A_frag[0][6], A_frag[0][7],
-//          A_lds_addr + 16 * sizeof(float));
-//   lds128(B_frag[0][0], B_frag[0][1], B_frag[0][2], B_frag[0][3], B_lds_addr);
-//   lds128(B_frag[0][4], B_frag[0][5], B_frag[0][6], B_frag[0][7],
-//          B_lds_addr + 32 * sizeof(float));
-
-//   // k_tiles loop
-//   for (; k_tiles > 0; --k_tiles) {
-// #pragma unroll
-//     for (int k_frag = 0; k_frag < 8; ++k_frag) {
-//       // store next A&B tile to shared memory
-//       if (k_frag == 7) {
-//         sts128(A_ldg_reg[0], A_ldg_reg[1], A_ldg_reg[2], A_ldg_reg[3],
-//                A_sts_addr);
-// #pragma unroll
-//         for (int i = 0; i < 4; ++i) {
-//           sts32(B_ldg_reg[i], B_sts_addr + i * 32 * sizeof(float));
-//         }
-
-//         __syncthreads();
-
-//         // switch double buffer
-//         A_lds_addr ^= 0x2000;
-//         B_lds_addr ^= 0x1000;
-//         A_sts_addr ^= 0x2000;
-//         B_sts_addr ^= 0x1000;
-
-//         // ldg pointer for next tile
-//         A_ldg_ptr += 8 * sizeof(float);
-//         B_ldg_ptr += B_ldg_step;
-//       }
-
-//       // load next A&B fragment from shared memory to register
-//       lds128(A_frag[(k_frag + 1) % 2][0], A_frag[(k_frag + 1) % 2][1],
-//              A_frag[(k_frag + 1) % 2][2], A_frag[(k_frag + 1) % 2][3],
-//              A_lds_addr + (k_frag + 1) % 8 * 132 * sizeof(float));
-//       lds128(A_frag[(k_frag + 1) % 2][4], A_frag[(k_frag + 1) % 2][5],
-//              A_frag[(k_frag + 1) % 2][6], A_frag[(k_frag + 1) % 2][7],
-//              A_lds_addr + ((k_frag + 1) % 8 * 132 + 16) * sizeof(float));
-//       lds128(B_frag[(k_frag + 1) % 2][0], B_frag[(k_frag + 1) % 2][1],
-//              B_frag[(k_frag + 1) % 2][2], B_frag[(k_frag + 1) % 2][3],
-//              B_lds_addr + (k_frag + 1) % 8 * 128 * sizeof(float));
-//       lds128(B_frag[(k_frag + 1) % 2][4], B_frag[(k_frag + 1) % 2][5],
-//              B_frag[(k_frag + 1) % 2][6], B_frag[(k_frag + 1) % 2][7],
-//              B_lds_addr + ((k_frag + 1) % 8 * 128 + 32) * sizeof(float));
-
-//       // load next A&B tile
-//       if (k_frag == 0) {
-// #pragma unroll
-//         for (int i = 0; i < 4; ++i) {
-//           ldg32_nc(A_ldg_reg[i], A_ldg_ptr + i * A_ldg_step,
-//                    (A_ldg_guard & (1u << i)) != 0);
-//         }
-
-// #pragma unroll
-//         for (int i = 0; i < 4; ++i) {
-//           ldg32_nc(B_ldg_reg[i], B_ldg_ptr + i * 32 * sizeof(float),
-//                    (B_ldg_guard & (1u << i)) != 0);
-//         }
-//       }
-
-// // FFMA loop
-// #pragma unroll
-//       for (int i = 0; i < 8; ++i) {
-// #pragma unroll
-//         for (int j = 0; j < 8; ++j) {
-//           C_frag[i][j] += A_frag[k_frag % 2][i] * B_frag[k_frag % 2][j];
-//         }
-//       }
-//     }
-//   }
-
-// // FFMA for the last tile
-// #pragma unroll
-//   for (int k_frag = 0; k_frag < 8; ++k_frag) {
-//     if (k_frag < 7) {
-//       // load next A&B fragment from shared memory to register
-//       lds128(A_frag[(k_frag + 1) % 2][0], A_frag[(k_frag + 1) % 2][1],
-//              A_frag[(k_frag + 1) % 2][2], A_frag[(k_frag + 1) % 2][3],
-//              A_lds_addr + (k_frag + 1) % 8 * 132 * sizeof(float));
-//       lds128(A_frag[(k_frag + 1) % 2][4], A_frag[(k_frag + 1) % 2][5],
-//              A_frag[(k_frag + 1) % 2][6], A_frag[(k_frag + 1) % 2][7],
-//              A_lds_addr + ((k_frag + 1) % 8 * 132 + 16) * sizeof(float));
-//       lds128(B_frag[(k_frag + 1) % 2][0], B_frag[(k_frag + 1) % 2][1],
-//              B_frag[(k_frag + 1) % 2][2], B_frag[(k_frag + 1) % 2][3],
-//              B_lds_addr + (k_frag + 1) % 8 * 128 * sizeof(float));
-//       lds128(B_frag[(k_frag + 1) % 2][4], B_frag[(k_frag + 1) % 2][5],
-//              B_frag[(k_frag + 1) % 2][6], B_frag[(k_frag + 1) % 2][7],
-//              B_lds_addr + ((k_frag + 1) % 8 * 128 + 32) * sizeof(float));
-//     }
-
-// // FFMA loop
-// #pragma unroll
-//     for (int i = 0; i < 8; ++i) {
-// #pragma unroll
-//       for (int j = 0; j < 8; ++j) {
-//         C_frag[i][j] += A_frag[k_frag % 2][i] * B_frag[k_frag % 2][j];
-//       }
-//     }
-//   }
-
-//   // C_tile write back, reuse A&B tile shared memory buffer
-//   uint32_t C_sts_addr = smem_u32addr((float4 *)(smem + warp_id * 2048) +
-//                                      mma_tid_y * 4 * 8 + mma_tid_x);
-//   const float *C_lds_ptr = (float *)(smem + warp_id * 2048) + lane_id;
-
-//   uint32_t m_idx = blockIdx.y * 128 + warp_id / 2 * 32;
-//   uint32_t n_idx = blockIdx.x * 128 + warp_id % 2 * 64 + lane_id;
-
-//   float *C_stg_ptr = C + m_idx * n + n_idx;
-
-//   if (m_idx >= m) {
-//     return;
-//   } else if (m_idx + 32 <= m) {
-//     uint32_t n_guard = n < n_idx ? 0 : n - n_idx;
-
-// #pragma unroll
-//     for (int i = 0; i < 2; ++i) {
-// #pragma unroll
-//       for (int j = 0; j < 2; ++j) {
-//         __syncthreads();
-
-// #pragma unroll
-//         for (int p = 0; p < 4; ++p) {
-//           sts128(C_frag[i * 4 + p][j * 4], C_frag[i * 4 + p][j * 4 + 1],
-//                  C_frag[i * 4 + p][j * 4 + 2], C_frag[i * 4 + p][j * 4 + 3],
-//                  C_sts_addr + p * 8 * sizeof(float4));
-//         }
-
-//         __syncthreads();
-
-// #pragma unroll
-//         for (int p = 0; p < 16; ++p) {
-//           stg32(C_lds_ptr[p * 32], C_stg_ptr + (i * 16 + p) * n + j * 32,
-//                 j * 32 < n_guard);
-//         }
-//       }
-//     }
-//   } else {
-// #pragma unroll
-//     for (int i = 0; i < 2; ++i) {
-// #pragma unroll
-//       for (int j = 0; j < 2; ++j) {
-//         StgFrag stg_frag(C_frag, j, i);
-
-//         C_tile_wb(stg_frag, C_stg_ptr + i * 16 * n + j * 32, C_lds_ptr,
-//                   C_sts_addr, m, n, m_idx + i * 16, n_idx + j * 32);
-//       }
-//     }
-//   }
-
+  //   }
+  // }
+  // __syncthreads();
 }
 
 // refer to  https://github.com/yzhaiustc/Optimizing-SGEMM-on-NVIDIA-Turing-GPUs
 template <typename T>
 void GEMM12(T *dA, T *dB, T *dC, int m, int n, int k) {
   dim3 grid((n + 127) / 128, (m + 127) / 128);
-  sgemm_128x128x8_kernel<<<grid, 256>>>(dA, dB, dC, m, n, k, k * sizeof(float),
-                                        n * sizeof(float) * 8);
+  sgemm_128x128x8_kernel_my<<<grid, 256>>>(
+      dA, dB, dC, m, n, k, k * sizeof(float), n * sizeof(float) * 8);
   cudaDeviceSynchronize();
 }
 
 template void GEMM12<float>(float *dA, float *dB, float *dC, int m, int n,
                             int k);
-
