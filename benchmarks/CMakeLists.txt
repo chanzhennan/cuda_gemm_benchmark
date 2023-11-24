@@ -16,7 +16,9 @@ list(
   # MatrixMulCUDA7/sgemm128.cc MatrixMulCUDA7/sgemm128.cu
   # MatrixMulCUDA8/dense.cc MatrixMulCUDA8/dense.cu MatrixMulCUDA9/cublas.cc
   # MatrixMulCUDA9/cublas.cu MatrixMulCUDA10/yzaiustc.cc
-  # MatrixMulCUDA10/yzaiustc.cu MatrixMulCUDA11/yhs.cc MatrixMulCUDA11/yhs.cu
+  # MatrixMulCUDA10/yzaiustc.cu
+  MatrixMulCUDA11/yhs.cc
+  MatrixMulCUDA11/yhs.cu
   MatrixMulCUDA12/czn.cc
   MatrixMulCUDA12/czn.cu)
 

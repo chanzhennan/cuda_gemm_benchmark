@@ -37,7 +37,7 @@ class Yhs : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Yhs, name)                                            \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->ArgsProduct({{5120}, {4096}, {4096}});
+      ->ArgsProduct({{4096}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM11_OP_TYPE(dType) BENCHMARK_GEMM11_OP(Gemm_##dType, dType)
 

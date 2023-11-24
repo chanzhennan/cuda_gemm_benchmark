@@ -34,10 +34,10 @@ class Czn : public BaseGemm {
 
     printf("\n");
     printf("\n");
-    printf("(cc) m * k \n\n");
+    printf("(cc) m * n \n\n");
     for (int j = 0; j < 8; j++) {
       for (int i = 0; i < 8; i++) {
-        printf("%.2f ", c[j * k + i]);
+        printf("%.2f ", c[j * n + i]);
       }
       printf("\n");
     }
@@ -72,6 +72,8 @@ class Czn : public BaseGemm {
     int k = state.range(2);
     printf("m = %d n = %d k = %d\n", m, n, k);
 
+    int k_th = 1;
+
     float* a = BaseGemm::getDeviceA();
     float* b = BaseGemm::getDeviceB();
     /*
@@ -86,7 +88,7 @@ class Czn : public BaseGemm {
     printf("(aa) m * k \n\n");
     for (int j = 0; j < 8; j++) {
       for (int i = 0; i < 8; i++) {
-        printf("%.2f ", a[j + i * k]);
+        printf("%.2f ", a[j + (8 * k_th) + i * k]);
       }
       printf("\n");
     }
@@ -101,7 +103,7 @@ class Czn : public BaseGemm {
     printf("\n\n (bb) k * n \n\n");
     for (int j = 0; j < 8; j++) {
       for (int i = 0; i < 8; i++) {
-        printf("%.2f ", b[j * n + i]);
+        printf("%.2f ", b[(j + (8 * k_th)) * n + i]);
       }
       printf("\n");
     }
@@ -116,7 +118,6 @@ class Czn : public BaseGemm {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
-    myprint2(st);                                                            \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -124,8 +125,7 @@ class Czn : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Czn, name)                                            \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->Iterations(1)                                                        \
-      ->ArgsProduct({{128}, {128}, {8}});
+      ->ArgsProduct({{4096}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM12_OP_TYPE(dType) BENCHMARK_GEMM12_OP(Gemm_##dType, dType)
 

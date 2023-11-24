@@ -33,7 +33,7 @@ class Naive : public BaseGemm {
 
     printf("\n");
     printf("\n");
-    printf("(cc) m * k \n\n");
+    printf("(cc) m * n \n\n");
     for (int j = 0; j < 8; j++) {
       for (int i = 0; i < 8; i++) {
         printf("%.2f ", c[j * n + i]);
@@ -72,6 +72,7 @@ class Naive : public BaseGemm {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
+    myprint2(st);                                                            \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -80,7 +81,7 @@ class Naive : public BaseGemm {
   BENCHMARK_REGISTER_F(Naive, name)                                          \
       ->Unit(benchmark::kMillisecond)                                        \
       ->Iterations(1)                                                        \
-      ->ArgsProduct({{128}, {128}, {8}});
+      ->ArgsProduct({{4096}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 
