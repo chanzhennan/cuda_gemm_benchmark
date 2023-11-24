@@ -24,6 +24,7 @@ class Czn : public BaseGemm {
   }
 
   void myprint2(benchmark::State& state) {
+    return;
     int m = state.range(0);
     int n = state.range(1);
     int k = state.range(2);
@@ -118,6 +119,7 @@ class Czn : public BaseGemm {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
+    myprint2(st);                                                            \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -125,7 +127,8 @@ class Czn : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Czn, name)                                            \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->ArgsProduct({{4096}, {4096}, {4096}});
+      ->ArgsProduct({{4096}, {4096}, {4096}})                                \
+      ->Iterations(1);
 
 #define BENCHMARK_GEMM12_OP_TYPE(dType) BENCHMARK_GEMM12_OP(Gemm_##dType, dType)
 

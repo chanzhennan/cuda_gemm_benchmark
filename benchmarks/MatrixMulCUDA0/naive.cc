@@ -23,6 +23,7 @@ class Naive : public BaseGemm {
   }
 
   void myprint2(benchmark::State& state) {
+    return;
     int m = state.range(0);
     int n = state.range(1);
     int k = state.range(2);

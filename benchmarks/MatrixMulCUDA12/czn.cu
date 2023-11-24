@@ -99,65 +99,6 @@ struct StgFrag {
   }
 };
 
-/*
- * matrix A, B and C: row-major
- *
- * mma block:
- * thread block tile: m128n128k8
- * warp tile: m32n64k8
- * thread tile: m8n8k8
- * thread fragment:
- *     matrixA: 8x1 FP32
- *     matrixB: 1x8 FP32
- *
- * ----------------------------------------------------------------
- * thread block tile map:
- *
- *                                128
- *                    --|---------------------|
- *             B_tile  8|                     |
- *                    --|---------------------|
- *
- *  A_tile   | 8 |      |    64    |
- *         --|---|    --|----------|----------|
- *           |   |    32|  warp_0  |  warp_1  |
- *           |   |    --|----------|----------|
- *           |   |      |  warp_2  |  warp_3  |
- *        128|   |      |----------|----------|
- *           |   |      |  warp_4  |  warp_5  |
- *           |   |      |----------|----------|
- *           |   |      |  warp_6  |  warp_7  |
- *         --|---|      |----------|----------|
- *
- * ----------------------------------------------------------------
- * warp tile map:
- *
- * 'z' thread map to avoid LDS.128 shared memory broadcast limitation.
- *
- *              |              32               ||
- *     B_frag
- * --|---|---|---|---|---|---|---|---||---|---|---|---|---|---|---|---| 1|///|
- * |   |   |   |   |   |   ||///|   |   |   |   |   |   |   |
- *            --|---|---|---|---|---|---|---|---||---|---|---|---|---|---|---|---|
- * A_frag       | 4 |                           ||
- *    | 1 |                                     ||
- *  --|---|-- |---|---|---|---|---|---|---|---||---|---------------------------|
- *    |///|4    |t0 |t2 |t4 |t6 |t8 |t10|t12|t14||t0 | |
- *    |---|--   |---|---|---|---|---|---|---|---||---| | |   |     |t1 |t3 |t5
- *              |t7 |t9 |t11|t13|t15||                               | 16|---|
- * |---|---|---|---|---|---|---|---||                               | |   |
- * |t16|t18|t20|t22|t24|t26|t28|t30||                               |
- *    |---|     |---|---|---|---|---|---|---|---|| | |   |
- * |t17|t19|t21|t23|t25|t27|t29|t31||                               |
- *  ==|===|=====|===|===|===|===|===|===|===|===||===|============================
- *    |///|     |t0 |                           ||t0 | |
- *    |---|     |---|                           ||---| | |   |     | || |
- *    |---|     |                               || | |   |     | || |
- *    |---|     |                               || | |   |     | || |
- *    |---| |-------------------------------||-------------------------------|
- *
- */
-
 __device__ void debugShd(float *A_smem, float *B_smem) {
   if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
     printf("\nkernel A\n ");
@@ -355,11 +296,6 @@ __global__ __launch_bounds__(256, 2) void sgemm_128x128x8_kernel_my(
          B_lds_addr + 4 * sizeof(float));
   __syncthreads();
 
-  // if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0)
-  // {
-  //   printf("k_tiles = %d\n", k_tiles);
-  // }
-
   int next_frag = 0;
   int this_frag = 0;
 
@@ -408,8 +344,8 @@ __global__ __launch_bounds__(256, 2) void sgemm_128x128x8_kernel_my(
         // Gmem(2) -> TReg(2)
 #pragma unroll
         for (int i = 0; i < 4; i++) {
-          bool guard = (A_ldg_guard & (1u << i)) != 0 && threadIdx.x % 8 < k;
-          ldg32_nc_0(A_ldg_reg[i], A_gmem + i * k * sizeof(float), guard);
+          ldg32_nc(A_ldg_reg[i], A_gmem + i * k * sizeof(float),
+                   (A_ldg_guard & (1u << i)) != 0);
         }
 
         ldg128(B_ldg_reg[0], B_ldg_reg[1], B_ldg_reg[2], B_ldg_reg[3], B_gmem,
