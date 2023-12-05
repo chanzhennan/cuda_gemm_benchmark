@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <vector>
 
-#include "MatrixMulCUDA11/yhs.cuh"
+#include "MatrixMulCUDA12/czn.cuh"
 
 __device__ __forceinline__ uint32_t smem_u32addr(const void *smem_ptr) {
   uint32_t addr;
@@ -99,7 +99,7 @@ struct StgFrag {
   }
 };
 
-__device__ void debugShd(float *A_smem, float *B_smem) {
+__device__ void debugShd_my(float *A_smem, float *B_smem) {
   if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
     printf("\nkernel A\n ");
     for (int i = 0; i < 132; i++) {
@@ -114,7 +114,7 @@ __device__ void debugShd(float *A_smem, float *B_smem) {
   }
 }
 
-__device__ void debugShd2(float *A_smem, float *B_smem) {
+__device__ void debugShd2_my(float *A_smem, float *B_smem) {
   if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
     printf("\nkernel A\n ");
     for (int j = 0; j < 8; j++) {
@@ -136,8 +136,8 @@ __device__ void debugShd2(float *A_smem, float *B_smem) {
   }
 }
 
-__device__ void debugReg(float **A_frag, float **B_frag, uint32_t A_lds_addr,
-                         uint32_t B_lds_addr, float *B_smem, float *A_smem) {
+__device__ void debugReg_my(float **A_frag, float **B_frag, uint32_t A_lds_addr,
+                            uint32_t B_lds_addr, float *B_smem, float *A_smem) {
   int k_frag = 1;
   int next_frag = (k_frag + 1) % 2;
 
