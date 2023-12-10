@@ -16,11 +16,11 @@ namespace mmbenchmark {
 template <int WARPS, int BLOCK_M, int BLOCK_N, int BLOCK_K, int STAGES,
           int SLICES>
 struct GlobalLoaderA {
-  // blockK 按照slice分割，每次的大小就是slice_k
-  static constexpr int SLICE_K = BLOCK_K / SLICES;  // 8
-  static constexpr int kShapeK = 8;
+  // 因为这个struct主要是block thread拷贝 所以可以不考虑warp的排布，直接32*1
+  // 拉开，有多少global数据宝贝，就直接拷贝多少个数
+  static constexpr int SLICE_K = BLOCK_K / SLICES;
 
-  using AccessType = float;
+  using AccessType = float4;  // 一个线程拷贝float4
   static constexpr int kAccessSize = sizeof(AccessType);
 
   static_assert(BLOCK_M % 32 == 0 && BLOCK_K % 8 == 0,
@@ -28,18 +28,21 @@ struct GlobalLoaderA {
 
   // A is [K/32, M/32, WARP_SIZE] uint4
   static constexpr int kShapeM = BLOCK_M;  // 128
+  static constexpr int kShapeK = SLICE_K;  // 8
 
   // thread access shape
-  static constexpr int kAccessM = 4;
-  static constexpr int kAccessK = 1;
+  static constexpr int kAccessM = 1;  //一个线程处理一个float4
+  static constexpr int kAccessK = 1;  //一个线程数里一个float4
 
   // warp thread arrangement
-  static constexpr int kWarpThreadC = 4;
-  static constexpr int kWarpThreadS = 8;
+  static constexpr int kWarpThreadC = 32;  // 直接平铺，
+  static constexpr int kWarpThreadS = 1;
 
   // warp shape per access
-  static constexpr int kWarpAccessM = kWarpThreadC * kAccessM;  // 16
-  static constexpr int kWarpAccessK = kWarpThreadS * kAccessK;  // 8
+  static constexpr int kWarpAccessM =
+      kWarpThreadC * kAccessM;  // 一个warp m维度能处理的个数
+  static constexpr int kWarpAccessK =
+      kWarpThreadS * kAccessK;  // 一个warp k维度能处理的个数
 
   // warp access iterations
   static constexpr int kWarpIterM = kShapeM / kWarpAccessM;
@@ -62,7 +65,7 @@ struct GlobalLoaderA {
   static constexpr int kSizePerStage = kShapeK * kShapeM;
   static constexpr int kSmemByteSize = kAccessSize * STAGES * kSizePerStage;
 
-  const uint* src_;
+  const float* src_;
   void* smem_;
   int m_;
   int k_;
@@ -71,7 +74,18 @@ struct GlobalLoaderA {
   int warp_id_;
   int lane_id_;
 
-  __device__ GlobalLoaderA(const uint* src, void* smem, int m, int k, int bm,
+  int src_offset_;
+  int dst_offset_;
+
+  int src_step_m_;
+  int src_step_k_;
+  int src_step_s_;
+
+  int dst_step_m_;
+  int dst_step_k_;
+  int dst_step_s_;
+
+  __device__ GlobalLoaderA(const float* src, void* smem, int m, int k, int bm,
                            int bk, int warp_id, int lane_id)
       : src_(src),
         smem_(smem),
@@ -95,12 +109,76 @@ struct GlobalLoaderA {
     const int src_offset_m = block_thread_offset_m + bm_;
     const int src_offset_k = block_thread_offset_k + bk_ / 32;
   }
+
+  __device__ void prefetch_stage(bool mask) {
+    for (int i = 0; i < kIterCount; ++i) {
+      prefetch(mask);
+      ++(*this);
+    }
+    // next_stage();
+  }
+
+  __device__ void prefetch(bool mask) {
+#if TURBOMIND_ARCH_SM80
+    cp_async_cg_A(smem_int_ptr_ + dst_offset_,
+                  (const AccessType*)src_ + src_offset_, mask);
+#else
+    if (mask) {
+      *(AccessType*)((uint8_t*)smem_ + dst_offset_) =
+          __ldg((const AccessType*)src_ + src_offset_);
+    }
+#endif
+  }
 };
 
 template <int WARPS, int BLOCK_M, int BLOCK_N, int BLOCK_K, int STAGES,
           int SLICES>
 struct GlobalLoaderB {
-  const uint* src_;
+  static constexpr int SLICE_K = BLOCK_K / SLICES;
+  static constexpr int kElementSize = sizeof(float);
+  using AccessType = float;
+  static constexpr int kAccessSize = sizeof(AccessType);
+
+  static constexpr int kShapeK = SLICE_K;
+  static constexpr int kShapeN = BLOCK_N;
+
+  static constexpr int kAccessK = kAccessSize / sizeof(half);
+
+  //   static_assert(kShapeK % kAccessSize == 0);
+
+  // warp thread arrangement
+  static constexpr int kWarpThreadC = std::max(kShapeK / kAccessK, 1);
+  static constexpr int kWarpThreadS = WARP_SIZE / kWarpThreadC;
+
+  // warp shape per access
+  static constexpr int kWarpAccessK = kWarpThreadC * kAccessK;
+  static constexpr int kWarpAccessN = kWarpThreadS;
+
+  // warp access iterations
+  static constexpr int kWarpIterK = kShapeK / kWarpAccessK;
+  static constexpr int kWarpIterN = kShapeN / kWarpAccessN;
+
+  // warp arrangement
+  static constexpr int kWarpK = kWarpIterK >= WARPS ? WARPS : kWarpIterK;
+  static constexpr int kWarpN = WARPS > kWarpIterK ? WARPS / kWarpK : 1;
+
+  // iterations
+  static constexpr int kIterK = kWarpIterK / kWarpK;
+  static constexpr int kIterN = kWarpIterN >= kWarpN ? kWarpIterN / kWarpN : 1;
+
+  static constexpr int kIterCount = kIterK * kIterN;
+  static_assert(kIterCount > 0);
+
+  // warp footprint
+  static constexpr int kWarpFootprintK = kWarpAccessK * kIterK;
+  static constexpr int kWarpFootprintN = kWarpAccessN * kIterN;
+
+  // Eliminate bank-conflicts for 8x4 half2 tiles, watch out for misalignment
+  static constexpr int kSmemPadCtaK = SLICE_K + 8;
+  static constexpr int kSizePerTile = BLOCK_N * kSmemPadCtaK;
+  static constexpr int kSmemByteSize = kElementSize * STAGES * kSizePerTile;
+
+  const float* src_;
   void* smem_;
 
   int n_;
@@ -110,7 +188,7 @@ struct GlobalLoaderB {
   int warp_id_;
   int lane_id_;
 
-  __device__ GlobalLoaderB(const uint* src, void* smem, int k, int n, int bk,
+  __device__ GlobalLoaderB(const float* src, void* smem, int k, int n, int bk,
                            int bn, int warp_id, int lane_id)
       : src_(src),
         smem_(smem),

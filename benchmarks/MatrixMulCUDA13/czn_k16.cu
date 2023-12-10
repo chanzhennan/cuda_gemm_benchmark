@@ -499,18 +499,91 @@ __device__ void debugReg(float **A_frag, float **B_frag, uint32_t A_lds_addr,
 
 // }
 
+static constexpr int OP_M = 16;
+static constexpr int OP_N = 8;
+static constexpr int OP_K = 16;
+
 template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
           int WARP_K, int STAGES>
 __device__ void
 mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::run(
     float *__restrict__ C, const float *__restrict__ A,
-    const float *__restrict__ B, int M, int N, int K) {}
+    const float *__restrict__ B, int M, int N, int K) {
+  float tb_frag_C[(WARP_N / OP_N) * (WARP_M / OP_M) * 4];
+
+  extern __shared__ uint8_t smem[];
+
+  const int warp_id = threadIdx.x / WARP_SIZE;
+  const int lane_id = threadIdx.x % WARP_SIZE;
+
+  /*
+   *
+   *   step 1 calculate warp id
+   *
+   *   |-----|-----|-----|-----|
+   *   |warp0|warp1|     |     |
+   *   |_____|_____|_____|_____|
+   *   |     |     |     |     |
+   *   |_____|_____|_____|_____|
+   *
+   *
+   *   step2 divide into warp_id_m warp_id_n
+   *
+   *   warp_id_nk
+   *   |
+   *   1                                         -->   warp_id_k
+   *   |                                               0
+   *   0                                         -->   |
+   *   -- 0 --- 1 --- 2 --- 3 ---  warp_id_m           -- 0 -- 1 -- warp_id_n
+   *
+   *
+   *
+   *
+   *
+   */
+
+  const int warp_id_m = warp_id % kWarpCountM;
+  const int warp_id_nk = warp_id / kWarpCountM;
+  const int warp_id_n = warp_id_nk % kWarpCountN;
+  const int warp_id_k = warp_id_nk / kWarpCountN;
+
+  const int warp_id_mn = warp_id_n * kWarpCountM + warp_id_m;
+
+  const int slice_id = warp_id_k;
+
+  const int cta_k = slice_id * SLICE_K;  // sliced-k offset
+  const int m_th_tile = blockIdx.x * TILE_M;
+  const int n_th_tile = blockIdx.y * TILE_N;
+
+  // each slice has its own partition of smem
+  float *const tb_smem_A =
+      (float *)(smem + GlobalLoaderA::kSmemByteSize * slice_id);
+  float *const tb_smem_B =
+      (float *)(smem + GlobalLoaderA::kSmemByteSize * SLICES +
+                GlobalLoaderA::kSmemByteSize * slice_id);
+
+  // [CTA_N / OP_N, CTA_M / OP_M, 4, WARP_SIZE], all mn fragments in CTA
+  float *const tb_smem_C = (float *)smem;
+
+  if (threadIdx.x == 0 && blockIdx.y == 0 && blockIdx.x == 0) {
+    printf("WARP_N = %d OP_N = %d WARP_M = %d OP_M = %d\n", WARP_N, OP_N,
+           WARP_M, OP_M);
+    printf("slice_id = %d SLICE_K = %d \n", slice_id, SLICE_K);
+    printf("cta_k = %d m_th_tile = %d n_th_tile = %d warp_id_mn = %d\n", cta_k,
+           m_th_tile, n_th_tile, warp_id_mn);
+  }
+
+  GlobalLoaderA iter_A{A,         tb_smem_A, M,          K,
+                       m_th_tile, cta_k,     warp_id_mn, lane_id};
+  GlobalLoaderB iter_B{B,         tb_smem_B, K,          N,
+                       n_th_tile, cta_k,     warp_id_mn, lane_id};
+}
 
 template <typename T>
 void GEMM13(T *dA, T *dB, T *dC, int m, int n, int k) {
   // auto gemm = new mmbenchmark::GemmKernel{};
   auto gemm = new mmbenchmark::GemmKernel<mmbenchmark::Shape<128, 128, 8>,
-                                          mmbenchmark::Shape<32, 64, 8>, 3>{};
+                                          mmbenchmark::Shape<64, 32, 1>, 3>{};
   std::ostream &outputStream = std::cout;
   gemm->Dump(outputStream);
   gemm->Launch(dB, dC, dA, m, n, k);

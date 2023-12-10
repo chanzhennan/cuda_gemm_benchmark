@@ -127,8 +127,8 @@ class Czn : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Czn, name)                                            \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->ArgsProduct({{4096}, {4096}, {4096}})                                \
-      ->Iterations(1);
+      ->ArgsProduct({{4096}, {4096}, {4096}});
+// ->Iterations(1);
 
 #define BENCHMARK_GEMM12_OP_TYPE(dType) BENCHMARK_GEMM12_OP(Gemm_##dType, dType)
 

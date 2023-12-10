@@ -21,8 +21,8 @@ template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
           int WARP_K, int STAGES>
 struct Gemm {
   // kWarpCountM = m / w_m
-  static constexpr int kWarpCountM = TILE_M / WARP_M;  // 128 / 32
-  static constexpr int kWarpCountN = TILE_N / WARP_N;  // 128 / 64
+  static constexpr int kWarpCountM = TILE_M / WARP_M;  // 128 / 64
+  static constexpr int kWarpCountN = TILE_N / WARP_N;  // 128 / 32
   static constexpr int kWarpCountK = TILE_K / WARP_K;  // 8 / 1
 
   static constexpr int kWarpCountMN = kWarpCountM * kWarpCountN;
@@ -37,8 +37,6 @@ struct Gemm {
 
   using GlobalLoaderA = mmbenchmark::GlobalLoaderA<kWarpCountMN, TILE_M, TILE_N,
                                                    TILE_K, STAGES, SLICES>;
-  // using IteratorQ = turbomind::IteratorQ<kWarpCountMN, TILE_M, TILE_N,
-  // TILE_K, STAGES, SLICES, GROUP_SIZE>;
   using GlobalLoaderB = mmbenchmark::GlobalLoaderB<kWarpCountMN, TILE_M, TILE_N,
                                                    TILE_K, STAGES, SLICES>;
 
@@ -56,7 +54,7 @@ struct GemmKernel : public CoreKernel {
   static constexpr WarpShape warp_shape{};
 
   // 128, 128, 8
-  // 32, 64, 1
+  // 64, 32, 1
   using GemmType = Gemm<tile_shape.m(), tile_shape.n(), tile_shape.k(),
                         warp_shape.m(), warp_shape.n(), warp_shape.k(), STAGES>;
 
@@ -67,9 +65,8 @@ struct GemmKernel : public CoreKernel {
   static constexpr int kSlices = GemmType::SLICES;
   static constexpr int kSmemSizeA =
       GemmType::GlobalLoaderA::kSmemByteSize * kSlices;
-  // static constexpr int kSmemSizeB    = GemmType::GlobalLoaderB::kSmemByteSize
-  // * kSlices;
-  static constexpr int kSmemSizeB = 100;
+  static constexpr int kSmemSizeB =
+      GemmType::GlobalLoaderB::kSmemByteSize * kSlices;
   static constexpr int kSmemSizeC =
       sizeof(float) * tile_shape.m() * tile_shape.n();
   static constexpr int kSmemByteSize =
@@ -82,6 +79,8 @@ struct GemmKernel : public CoreKernel {
   void Launch(float* C, const float* A, const float* B, int M, int N,
               int K) override {
     constexpr int block_size = GemmType::kWarpCount * WARP_SIZE;
+
+    std::cout << "block_size " << block_size << std::endl;
 
     dim3 grid_size((M + tile_shape.m() - 1) / tile_shape.m(),
                    (N + tile_shape.n() - 1) / tile_shape.n());
@@ -119,22 +118,25 @@ struct GemmKernel : public CoreKernel {
       os << "[A] ============: " << Iter::kSmemByteSize << std::endl;
       os << std::endl;
     }
-    // {
-    //     using Iter = typename GemmType::IteratorB;
-    //     os << "[B] shape: " << Iter::kShapeK << " " << Iter::kShapeN <<
-    //     std::endl; os << "[B] warp thread arrangement: " <<
-    //     Iter::kWarpThreadC << " " << Iter::kWarpThreadS << std::endl; os <<
-    //     "[B] warp shape per access: " << Iter::kWarpAccessK << " " <<
-    //     Iter::kWarpAccessN << std::endl; os << "[B] warp access iters: " <<
-    //     Iter::kWarpIterK << " " << Iter::kWarpIterN << std::endl; os << "[B]
-    //     warp arrangement: " << Iter::kWarpK << " " << Iter::kWarpN <<
-    //     std::endl; os << "[B] iterations: " << Iter::kIterK << " " <<
-    //     Iter::kIterN << std::endl; os << "[B] iters per tile: " <<
-    //     Iter::kIterCount << std::endl; os << "[B] warp footprint: " <<
-    //     Iter::kWarpFootprintK << " " << Iter::kWarpFootprintN << std::endl;
-    //     os << "[B] shared memory: " << Iter::kSmemByteSize << std::endl;
-    //     os << std::endl;
-    // }
+    {
+      using Iter = typename GemmType::GlobalLoaderB;
+      os << "[B] shape: " << Iter::kShapeK << " " << Iter::kShapeN << std::endl;
+      os << "[B] warp thread arrangement: " << Iter::kWarpThreadC << " "
+         << Iter::kWarpThreadS << std::endl;
+      os << "[B] warp shape per access: " << Iter::kWarpAccessK << " "
+         << Iter::kWarpAccessN << std::endl;
+      os << "[B] warp access iters: " << Iter::kWarpIterK << " "
+         << Iter::kWarpIterN << std::endl;
+      os << "[B] warp arrangement: " << Iter::kWarpK << " " << Iter::kWarpN
+         << std::endl;
+      os << "[B] iterations: " << Iter::kIterK << " " << Iter::kIterN
+         << std::endl;
+      os << "[B] iters per tile: " << Iter::kIterCount << std::endl;
+      os << "[B] warp footprint: " << Iter::kWarpFootprintK << " "
+         << Iter::kWarpFootprintN << std::endl;
+      os << "[B] shared memory: " << Iter::kSmemByteSize << std::endl;
+      os << std::endl;
+    }
     // {
 
     //     using Iter = typename GemmType::IteratorQ;
