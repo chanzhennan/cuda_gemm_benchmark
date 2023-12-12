@@ -583,7 +583,7 @@ template <typename T>
 void GEMM13(T *dA, T *dB, T *dC, int m, int n, int k) {
   // auto gemm = new mmbenchmark::GemmKernel{};
   auto gemm = new mmbenchmark::GemmKernel<mmbenchmark::Shape<128, 128, 8>,
-                                          mmbenchmark::Shape<64, 32, 1>, 3>{};
+                                          mmbenchmark::Shape<64, 32, 8>, 3>{};
   std::ostream &outputStream = std::cout;
   gemm->Dump(outputStream);
   gemm->Launch(dB, dC, dA, m, n, k);

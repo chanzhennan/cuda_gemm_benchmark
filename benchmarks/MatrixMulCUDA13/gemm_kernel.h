@@ -23,7 +23,7 @@ struct Gemm {
   // kWarpCountM = m / w_m
   static constexpr int kWarpCountM = TILE_M / WARP_M;  // 128 / 64
   static constexpr int kWarpCountN = TILE_N / WARP_N;  // 128 / 32
-  static constexpr int kWarpCountK = TILE_K / WARP_K;  // 8 / 1
+  static constexpr int kWarpCountK = TILE_K / WARP_K;  // 8 / 8
 
   static constexpr int kWarpCountMN = kWarpCountM * kWarpCountN;  // 4 * 2 = 8
   static constexpr int kWarpCount = kWarpCountMN * kWarpCountK;
@@ -31,7 +31,7 @@ struct Gemm {
   // slice = w_k
   static constexpr int SLICES = kWarpCountK;
   // slice_k = k / w_k
-  static constexpr int SLICE_K = TILE_K / SLICES;  // 8 / 8
+  static constexpr int SLICE_K = TILE_K / SLICES;  // 8 / 1
 
   static_assert(SLICE_K % WARP_K == 0, "infeasible sliced-k setting");
 

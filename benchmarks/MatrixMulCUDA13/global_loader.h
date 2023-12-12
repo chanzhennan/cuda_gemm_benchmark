@@ -45,25 +45,26 @@ struct GlobalLoaderA {
       kWarpThreadS * kAccessK;  // 一个warp k维度能处理的个数   1 * 1 = 1
 
   // warp access iterations
-  static constexpr int kWarpIterM = kShapeM / kWarpAccessM;   128 / 128 = 1
-  static constexpr int kWarpIterK = kShapeK / kWarpAccessK;   8 / 1 = 8
+  static constexpr int kWarpIterM = kShapeM / kWarpAccessM;  // 128 / 128 = 1
+  static constexpr int kWarpIterK = kShapeK / kWarpAccessK;  // 8 / 1 = 8
 
   // warp arrangement
-  static constexpr int kWarpM = kWarpIterM >= WARPS ? WARPS : kWarpIterM;  // 1
-  static constexpr int kWarpK = WARPS > kWarpIterM ? (WARPS / kWarpM) : 1; // 8
+  static constexpr int kWarpM = kWarpIterM >= WARPS ? WARPS : kWarpIterM;   // 1
+  static constexpr int kWarpK = WARPS > kWarpIterM ? (WARPS / kWarpM) : 1;  // 8
 
   // iterations
-  static constexpr int kIterM = kWarpIterM / kWarpM;  // 1 
+  static constexpr int kIterM = kWarpIterM / kWarpM;  // 1
   static constexpr int kIterK = kWarpIterK / kWarpK;  // 1
 
   static constexpr int kIterCount = kIterM * kIterK;  // 1
 
   // warp footprint
-  static constexpr int kWarpFootprintM = kWarpAccessM * kIterM;  // 128 * 1 
+  static constexpr int kWarpFootprintM = kWarpAccessM * kIterM;  // 128 * 1
   static constexpr int kWarpFootprintK = kWarpAccessK * kIterK;  // 1 * 1
 
-  static constexpr int kSizePerStage = kShapeK * kShapeM;  // 128 * 8 
-  static constexpr int kSmemByteSize = kAccessSize * STAGES * kSizePerStage; // 128 * 8 * 3
+  static constexpr int kSizePerStage = kShapeK * kShapeM;  // 128 * 8
+  static constexpr int kSmemByteSize =
+      kAccessSize * STAGES * kSizePerStage;  // 128 * 8 * 3
 
   const float* src_;
   void* smem_;
@@ -142,7 +143,7 @@ struct GlobalLoaderB {
   static constexpr int kShapeK = SLICE_K;
   static constexpr int kShapeN = BLOCK_N;
 
-  static constexpr int kAccessK = kAccessSize / sizeof(half);
+  static constexpr int kAccessK = kAccessSize / sizeof(float);
 
   //   static_assert(kShapeK % kAccessSize == 0);
 
