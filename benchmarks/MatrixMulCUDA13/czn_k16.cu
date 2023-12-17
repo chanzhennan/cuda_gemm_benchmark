@@ -511,7 +511,7 @@ mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::run(
     const float *__restrict__ B, int M, int N, int K) {
   float tb_frag_C[(WARP_N / OP_N) * (WARP_M / OP_M) * 4];
 
-  extern __shared__ uint8_t smem[];
+  extern __shared__ char smem[];
 
   const int warp_id = threadIdx.x / WARP_SIZE;
   const int lane_id = threadIdx.x % WARP_SIZE;
@@ -551,9 +551,17 @@ mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::run(
 
   const int slice_id = warp_id_k;
 
-  const int cta_k = slice_id * SLICE_K;  // sliced-k offset
-  const int m_th_tile = blockIdx.x * TILE_M;
-  const int n_th_tile = blockIdx.y * TILE_N;
+  const int tile_kth = slice_id * SLICE_K;  // sliced-k offset
+  const int tile_mth = blockIdx.x * TILE_M;
+  const int tile_nth = blockIdx.y * TILE_N;
+
+  // if (threadIdx.x < 64 && blockIdx.y == 0 && blockIdx.x == 0) {
+  //   printf("XXXX WARP_N = %d WARP_M = %d\n", WARP_N, WARP_M);
+  //   printf("XXXX slice_id = %d SLICE_K = %d \n", slice_id, SLICE_K);
+  //   printf("XXXX tile_k = %d m_th_tile = %d n_th_tile = %d warp_id_mn =
+  //   %d\n", tile_kth,
+  //          tile_mth, tile_nth, warp_id_mn);
+  // }
 
   // each slice has its own partition of smem
   float *const tb_smem_A =
@@ -565,25 +573,30 @@ mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::run(
   // [CTA_N / OP_N, CTA_M / OP_M, 4, WARP_SIZE], all mn fragments in CTA
   float *const tb_smem_C = (float *)smem;
 
-  if (threadIdx.x == 0 && blockIdx.y == 0 && blockIdx.x == 0) {
-    printf("WARP_N = %d OP_N = %d WARP_M = %d OP_M = %d\n", WARP_N, OP_N,
-           WARP_M, OP_M);
-    printf("slice_id = %d SLICE_K = %d \n", slice_id, SLICE_K);
-    printf("cta_k = %d m_th_tile = %d n_th_tile = %d warp_id_mn = %d\n", cta_k,
-           m_th_tile, n_th_tile, warp_id_mn);
-  }
+  // clang-format off
+  GlobalLoaderA iter_A{A, tb_smem_A, M, K, tile_mth, tile_kth, warp_id_mn, lane_id};
+  GlobalLoaderB iter_B{B, tb_smem_B, K, N, tile_nth, tile_kth, warp_id_mn, lane_id};
+  // clang-format on
 
-  GlobalLoaderA iter_A{A,         tb_smem_A, M,          K,
-                       m_th_tile, cta_k,     warp_id_mn, lane_id};
-  GlobalLoaderB iter_B{B,         tb_smem_B, K,          N,
-                       n_th_tile, cta_k,     warp_id_mn, lane_id};
+  int gemm_iter = (K + TILE_K - 1) / TILE_K;
+
+  for (int stage = 0; stage < STAGES - 1; ++stage, --gemm_iter) {
+    // iter_A.prefetch_stage(gemm_iter > 0);
+    iter_B.prefetch_stage(gemm_iter > 0);
+    __pipeline_commit();
+  }
+  float *tmpb = (float *)iter_B.smem_;
+  if (threadIdx.x < 64 && blockIdx.x == 0 && blockIdx.y == 0) {
+    printf("tmpb[%d] = %f gloab[%d] = %f\n", threadIdx.x, tmpb[threadIdx.x],
+           threadIdx.x, B[threadIdx.x]);
+  }
 }
 
 template <typename T>
 void GEMM13(T *dA, T *dB, T *dC, int m, int n, int k) {
   // auto gemm = new mmbenchmark::GemmKernel{};
   auto gemm = new mmbenchmark::GemmKernel<mmbenchmark::Shape<128, 128, 8>,
-                                          mmbenchmark::Shape<64, 32, 8>, 3>{};
+                                          mmbenchmark::Shape<32, 64, 8>, 3>{};
   std::ostream &outputStream = std::cout;
   gemm->Dump(outputStream);
   gemm->Launch(dB, dC, dA, m, n, k);

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cuda_fp16.h>
+#include <cuda_pipeline_primitives.h>
 
 #include <cassert>
 #include <cstdint>
@@ -176,17 +177,6 @@ constexpr int WARP_SIZE = 32;
 //     return result;
 // }
 
-// __inline__ __device__ uint32_t cast_smem_ptr_to_uint(void const* const ptr) {
-//     uint32_t smem_int_ptr;
-
-//     asm("{.reg .u64 smem_ptr; cvta.to.shared.u64 smem_ptr, %1; cvt.u32.u64
-//     %0, smem_ptr; }\n"
-//         : "=r"(smem_int_ptr)
-//         : "l"(ptr));
-
-//     return smem_int_ptr;
-// }
-
 // __inline__ __device__ void ldmatrix_m8n8_x4_b16(uint& d0, uint& d1, uint& d2,
 // uint& d3, uint32_t smem_int_ptr) { #if TURBOMIND_ARCH_SM75
 //     asm("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {%0,%1,%2,%3}, [%4];\n"
@@ -257,6 +247,17 @@ constexpr int WARP_SIZE = 32;
 // }
 
 namespace mmbenchmark {
+
+__inline__ __device__ uint32_t cast_smem_ptr_to_uint(void const* const ptr) {
+  uint32_t smem_int_ptr;
+
+  asm("{.reg .u64 smem_ptr; cvta.to.shared.u64 smem_ptr, %1; cvt.u32.u64 %0, "
+      "smem_ptr; }\n"
+      : "=r"(smem_int_ptr)
+      : "l"(ptr));
+
+  return smem_int_ptr;
+}
 
 template <typename T, int N>
 struct Array {
