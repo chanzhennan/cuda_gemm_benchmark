@@ -5,8 +5,8 @@
 #include <memory>
 #include <sstream>
 
-struct CoreKernel {
-  virtual ~CoreKernel() = default;
+struct iBaseGemm {
+  virtual ~iBaseGemm() = default;
 
   // virtual void GetMetric(Metric& metric, int m, int n, int k) = 0;
 
