@@ -210,9 +210,28 @@ struct GlobalLoaderA {
   __device__ void prefetch_stage(bool mask) {
     for (int i = 0; i < kIterCount; ++i) {
       prefetch(mask);
-      ++(*this);
+      // ++(*this);
     }
     // next_stage();
+  }
+
+  __device__ void next_stage() {
+    src_offset_ += src_step_s_;
+    dst_offset_ += dst_step_s_;
+
+    if (dst_offset_ >= kSmemByteSize) {
+      dst_offset_ -= kSmemByteSize;
+    }
+  }
+
+  __device__ void prefetch_batch(int batch_idx, int batch_size, bool mask) {
+    PRAGMA_UNROLL
+    for (int i = 0; i < batch_size; ++i) {
+      if (batch_idx * batch_size + i < kIterCount) {
+        prefetch(mask);
+        // ++(*this);
+      }
+    }
   }
 
   __device__ GlobalLoaderA& operator++() {
@@ -230,13 +249,6 @@ struct GlobalLoaderA {
   }
 
   __device__ void prefetch(bool mask) {
-    if (threadIdx.x < 10 && blockIdx.x == 0 && blockIdx.y == 0) {
-      printf(
-          "xxxx tid = %d, src_offset_ = %d dst_offset_ = %d smem_int_ptr_= "
-          "%d\n",
-          threadIdx.x, src_offset_, dst_offset_, smem_int_ptr_);
-    }
-
 #if TURBOMIND_ARCH_SM80
     cp_async_cg_A(smem_int_ptr_ + dst_offset_,
                   (const AccessType*)src_ + src_offset_, mask);
@@ -312,6 +324,8 @@ struct GlobalLoaderB {
   int src_offset_;
   int dst_offset_;
 
+  bool is_out_of_bound_;  // mask for out-of-bound warps
+
   int src_step_k_;
   int src_step_n_;
   int dst_step_k_;
@@ -323,6 +337,8 @@ struct GlobalLoaderB {
   int tmp_src_offset_n_;
 
   uint32_t smem_int_ptr_;
+  int iter_k_{0};
+  int iter_n_{0};
 
   __device__ GlobalLoaderB(const float* src, void* smem, int k, int n, int bk,
                            int bn, int warp_id, int lane_id)
@@ -382,6 +398,36 @@ struct GlobalLoaderB {
     tmp_dst_offset_ = dst_offset_;
 
     tmp_src_offset_n_ = src_offset_n_;
+    is_valid_n_ = tmp_src_offset_n_ < n_;
+  }
+
+  __device__ void prefetch_batch(int batch_idx, int batch_size, bool mask) {
+    if (is_out_of_bound_) {
+      return;
+    }
+
+    PRAGMA_UNROLL
+    for (int i = 0; i < batch_size; ++i) {
+      if (batch_idx * batch_size + i < kIterCount) {
+        prefetch(mask);
+        // ++(*this);
+      }
+    }
+  }
+
+  __device__ void next_stage() {
+    iter_n_ = 0;
+
+    src_offset_ += BLOCK_K;
+    dst_offset_ += kElementSize * kSizePerTile;
+    if (dst_offset_ >= kSmemByteSize) {
+      dst_offset_ -= kSmemByteSize;
+    }
+
+    tmp_src_offset_ = src_offset_;
+    tmp_dst_offset_ = dst_offset_;
+    tmp_src_offset_n_ = src_offset_n_;
+
     is_valid_n_ = tmp_src_offset_n_ < n_;
   }
 

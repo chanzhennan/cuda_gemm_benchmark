@@ -6,19 +6,18 @@
 #include <sstream>
 
 #include "MatrixMulCUDA13/common.h"
-#include "MatrixMulCUDA13/global_loader.h"
 #include "MatrixMulCUDA13/gemm_base.h"
+#include "MatrixMulCUDA13/global_loader.h"
+#include "MatrixMulCUDA13/warp_iterator.h"
 
 namespace mmbenchmark {
 
-
 // BaseGemm[定义接口] ---> GemmImpl[继承接口, 实现接口]
 //                               | ---> Gemm[协作类][计算warp次数和split-k次数]
-//                                    ｜----> GlobalLoaderA[协作类][load g_A -> s_A]
-//                                     |----> GlobalLoaderB[协作类][load g_B -> s_B]
-
-
-
+//                                    ｜----> GlobalLoaderA[协作类][load g_A ->
+//                                    s_A]
+//                                     |----> GlobalLoaderB[协作类][load g_B ->
+//                                     s_B]
 
 template <typename Gemm>
 __global__ void gemm_kernel(float* __restrict__ C, const float* __restrict__ A,
@@ -49,8 +48,30 @@ struct Gemm {
   using GlobalLoaderB = mmbenchmark::GlobalLoaderB<kWarpCountMN, TILE_M, TILE_N,
                                                    TILE_K, STAGES, SLICES>;
 
+  using WarpIterA =
+      mmbenchmark::WarpIteratorA<TILE_M, TILE_K, WARP_M, WARP_K,
+                                 GlobalLoaderA::kSizePerStage, STAGES>;
+  using WarpIterB =
+      mmbenchmark::WarpIteratorB<TILE_N, TILE_K, WARP_N, WARP_K,
+                                 GlobalLoaderB::kSmemPadCtaN, STAGES>;
+
+  Array<half, 8> warp_frag_A_[2][WARP_M / OP_M];
+  Array<half, 4> warp_frag_B_[2][WARP_N / OP_N];
+
+  __device__ void warp_calc(GlobalLoaderA& iter_A, GlobalLoaderB& iter_B,
+                            WarpIterA& warp_iter_A, WarpIterB& warp_iter_B,
+                            float* accum, int slice_id, int& gemm_iter);
   __device__ void main_run(float* __restrict__ C, const float* __restrict__ A,
-                      const float* __restrict__ B, int M, int N, int K);
+                           const float* __restrict__ B, int M, int N, int K);
+  __device__ void sync_slice(int slice_id);
+
+  template <typename T, int N>
+  __device__ static void clear(T (&dst)[N]) {
+    PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      dst[i] = T{};
+    }
+  }
 };
 
 template <typename TileShape, typename WarpShape, int STAGES>
@@ -99,7 +120,7 @@ struct GemmImpl : public iBaseGemm {
     gemm_kernel<GemmType>
         <<<grid_size, block_size, kSmemByteSize, stream>>>(C, A, B, M, N, K);
   }
-  
+
   void Dump(std::ostream& os) override {
     {
       os << "[Gemm] CTA shape: " << tile_shape.m() << "x" << tile_shape.n()
@@ -112,20 +133,28 @@ struct GemmImpl : public iBaseGemm {
       os << std::endl;
     }
 
-     {
-       using Iter = typename GemmType::GlobalLoaderA;
-       os << "[A] shape: " << Iter::kShapeM << " " << Iter::kShapeK <<
-       std::endl; os << "[A] warp thread arrangement: " << Iter::kWarpThreadC << " "
+    {
+      using Iter = typename GemmType::GlobalLoaderA;
+      os << "[A] shape: " << Iter::kShapeM << " " << Iter::kShapeK << std::endl;
+      os << "[A] warp thread arrangement: " << Iter::kWarpThreadC << " "
          << Iter::kWarpThreadS << std::endl;
-       os << "[A] warp shape per access: " << Iter::kWarpAccessM << " " << " *** It represent the shape of warp in each global memory access.***" <<std::endl;
-       os << "[A] warp access iters: " << Iter::kWarpIterM << " " << Iter::kWarpIterK << std::endl;
-       os << "[A] warp arrangement: " << Iter::kWarpM << " " << Iter::kWarpK << std::endl;
-       os << "[A] iterations: " << Iter::kIterM << " " << Iter::kIterK << " *** It represent the iterations in load global memory. *** " <<std::endl;
-       os << "[A] iters per tile: " << Iter::kIterCount << std::endl;
-       os << "[A] warp footprint: " << Iter::kWarpFootprintM << " " << Iter::kWarpFootprintK << std::endl;
-       os << "[A] shared memory: " << Iter::kSmemByteSize << std::endl;
-       os << std::endl;
-     }
+      os << "[A] warp shape per access: " << Iter::kWarpAccessM << " "
+         << " *** It represent the shape of warp in each global memory "
+            "access.***"
+         << std::endl;
+      os << "[A] warp access iters: " << Iter::kWarpIterM << " "
+         << Iter::kWarpIterK << std::endl;
+      os << "[A] warp arrangement: " << Iter::kWarpM << " " << Iter::kWarpK
+         << std::endl;
+      os << "[A] iterations: " << Iter::kIterM << " " << Iter::kIterK
+         << " *** It represent the iterations in load global memory. *** "
+         << std::endl;
+      os << "[A] iters per tile: " << Iter::kIterCount << std::endl;
+      os << "[A] warp footprint: " << Iter::kWarpFootprintM << " "
+         << Iter::kWarpFootprintK << std::endl;
+      os << "[A] shared memory: " << Iter::kSmemByteSize << std::endl;
+      os << std::endl;
+    }
     {
       using Iter = typename GemmType::GlobalLoaderB;
       os << "[B] shape: "

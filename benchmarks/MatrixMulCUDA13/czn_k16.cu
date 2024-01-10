@@ -8,16 +8,90 @@
 #include "MatrixMulCUDA13/czn_k16.cuh"
 #include "MatrixMulCUDA13/gemm_impl.h"
 
-static constexpr int OP_M = 16;
-static constexpr int OP_N = 8;
-static constexpr int OP_K = 16;
+template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
+          int WARP_K, int STAGES>
+__device__ void
+mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K,
+                  STAGES>::warp_calc(GlobalLoaderA &iter_A,
+                                     GlobalLoaderB &iter_B,
+                                     WarpIterA &warp_iter_A,
+                                     WarpIterB &warp_iter_B, float *accum,
+                                     int slice_id, int &gemm_iter) {
+  constexpr int ITER_M = WARP_M / OP_M;
+  constexpr int ITER_N = WARP_N / OP_N;
+  constexpr int ITER_K = WARP_K / OP_K;
+
+  constexpr int kBatchA = (GlobalLoaderA::kIterCount + ITER_K - 1) / ITER_K;
+  constexpr int kBatchB = (GlobalLoaderB::kIterCount + ITER_K - 1) / ITER_K;
+
+  auto frag_C_ptr = (Array<float, 4> *)accum;  // [ITER_N, ITER_M]
+
+  PRAGMA_UNROLL
+  for (int iter_k = 0; iter_k < ITER_K; ++iter_k) {
+    warp_iter_A.load(warp_frag_A_[(iter_k + 1) % 2], (iter_k + 1) % ITER_K);
+    warp_iter_B.load(warp_frag_B_[(iter_k + 1) % 2], (iter_k + 1) % ITER_K);
+
+    auto warp_frag_A = warp_frag_A_[iter_k % 2];
+    auto warp_frag_B = warp_frag_B_[iter_k % 2];
+
+    PRAGMA_UNROLL
+    for (int iter_m = 0; iter_m < ITER_M; ++iter_m) {
+      PRAGMA_UNROLL
+      for (int iter_n = 0; iter_n < ITER_N; ++iter_n) {
+        auto &frag_A = warp_frag_A[iter_m];
+        auto &frag_B = warp_frag_B[iter_n];
+        auto &frag_C = frag_C_ptr[iter_n * ITER_M + iter_m];
+        // frag_C += frag_A * frag_B;
+        // mma_m16n8k16_row_col(frag_C, frag_A, frag_B, frag_C);
+      }
+    }
+
+    if (iter_k < ITER_K - 1) {
+      iter_A.prefetch_batch(iter_k, kBatchA, gemm_iter > 0);
+      iter_B.prefetch_batch(iter_k, kBatchB, gemm_iter > 0);
+    }
+
+    if (iter_k == ITER_K - 2) {
+      iter_A.prefetch_batch(iter_k + 1, kBatchA, gemm_iter > 0);
+      iter_B.prefetch_batch(iter_k + 1, kBatchB, gemm_iter > 0);
+
+      __pipeline_commit();
+      __pipeline_wait_prior(STAGES - 2);
+      sync_slice(slice_id);
+
+      iter_A.next_stage();
+      iter_B.next_stage();
+
+      warp_iter_A.next_stage();
+      warp_iter_B.next_stage();
+
+      --gemm_iter;
+    }
+  }
+}
+
+template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
+          int WARP_K, int STAGES>
+__device__ void mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N,
+                                  WARP_K, STAGES>::sync_slice(int slice_id) {
+  if (SLICES == 1) {
+    __syncthreads();
+  } else {
+    constexpr int SLICE_GROUP = (SLICES + 7) / 8;
+    constexpr uint32_t num_threads = kWarpCountMN * WARP_SIZE;
+    const uint32_t barrier_id = slice_id / SLICE_GROUP + 1;
+    asm volatile("bar.sync %0, %1;" : : "r"(barrier_id), "n"(num_threads));
+  }
+}
 
 template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
           int WARP_K, int STAGES>
 __device__ void
-mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::main_run(
-    float *__restrict__ C, const float *__restrict__ A,
-    const float *__restrict__ B, int M, int N, int K) {
+mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K,
+                  STAGES>::main_run(float *__restrict__ C,
+                                    const float *__restrict__ A,
+                                    const float *__restrict__ B, int M, int N,
+                                    int K) {
   float tb_frag_C[(WARP_N / OP_N) * (WARP_M / OP_M) * 4];
 
   extern __shared__ char smem[];
@@ -64,14 +138,6 @@ mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::main_
   const int tile_mth = blockIdx.x * TILE_M;
   const int tile_nth = blockIdx.y * TILE_N;
 
-  // if (threadIdx.x < 64 && blockIdx.y == 0 && blockIdx.x == 0) {
-  //   printf("XXXX WARP_N = %d WARP_M = %d\n", WARP_N, WARP_M);
-  //   printf("XXXX slice_id = %d SLICE_K = %d \n", slice_id, SLICE_K);
-  //   printf("XXXX tile_k = %d m_th_tile = %d n_th_tile = %d warp_id_mn =
-  //   %d\n", tile_kth,
-  //          tile_mth, tile_nth, warp_id_mn);
-  // }
-
   // each slice has its own partition of smem
   float *const tb_smem_A =
       (float *)(smem + GlobalLoaderA::kSmemByteSize * slice_id);
@@ -87,25 +153,48 @@ mmbenchmark::Gemm<TILE_M, TILE_N, TILE_K, WARP_M, WARP_N, WARP_K, STAGES>::main_
   GlobalLoaderB iter_B{B, tb_smem_B, K, N, tile_nth, tile_kth, warp_id_mn, lane_id};
   // clang-format on
 
+  const int offset_m = warp_id_m * WARP_M + lane_id;
+
+  WarpIterA warp_iter_A(iter_A.smem_int_ptr_, warp_id, lane_id, offset_m);
+  WarpIterB warp_iter_B(iter_B.smem_int_ptr_, warp_id_n, lane_id, 0);
+
   int gemm_iter = (K + TILE_K - 1) / TILE_K;
 
   for (int stage = 0; stage < STAGES - 1; ++stage, --gemm_iter) {
-    // iter_A.prefetch_stage(gemm_iter > 0);
+    iter_A.prefetch_stage(gemm_iter > 0);
     iter_B.prefetch_stage(gemm_iter > 0);
     __pipeline_commit();
   }
-  float *tmpb = (float *)iter_B.smem_;
-  if (threadIdx.x < 64 && blockIdx.x == 0 && blockIdx.y == 0) {
-    printf("tmpb[%d] = %f gloab[%d] = %f\n", threadIdx.x, tmpb[threadIdx.x],
-           threadIdx.x, B[threadIdx.x]);
+  // float *tmpb = (float *)iter_B.smem_;
+  // if (threadIdx.x < 64 && blockIdx.x == 0 && blockIdx.y == 0) {
+  //   printf("tmpb[%d] = %f gloab[%d] = %f\n", threadIdx.x, tmpb[threadIdx.x],
+  //          threadIdx.x, B[threadIdx.x]);
+  // }
+
+  clear(tb_frag_C);
+
+  __pipeline_wait_prior(STAGES - 2);
+  sync_slice(slice_id);
+
+  warp_iter_A.load(warp_frag_A_[0], 0);
+  warp_iter_B.load(warp_frag_B_[0], 0);
+
+  PRAGMA_NO_UNROLL
+  for (; gemm_iter > -STAGES + 1;) {
+    warp_calc(iter_A, iter_B, warp_iter_A, warp_iter_B, tb_frag_C, slice_id,
+              gemm_iter);
   }
+
+  __pipeline_commit();
+  __pipeline_wait_prior(0);
+  __syncthreads();
 }
 
 template <typename T>
 void GEMM13(T *dA, T *dB, T *dC, int m, int n, int k) {
   // auto gemm = new mmbenchmark::GemmKernel{};
   auto gemm = new mmbenchmark::GemmImpl<mmbenchmark::Shape<128, 128, 8>,
-                                          mmbenchmark::Shape<32, 64, 8>, 3>{};
+                                        mmbenchmark::Shape<32, 64, 8>, 3>{};
   std::ostream &outputStream = std::cout;
   gemm->Dump(outputStream);
   gemm->Launch(dB, dC, dA, m, n, k);

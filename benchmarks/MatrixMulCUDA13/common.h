@@ -11,6 +11,10 @@
 
 #include "macro.h"
 
+static constexpr int OP_M = 8;
+static constexpr int OP_N = 8;
+static constexpr int OP_K = 1;
+
 #ifndef TURBOMIND_S4_DEQUANT_USE_FMA
 #define TURBOMIND_S4_DEQUANT_USE_FMA 0
 #endif
