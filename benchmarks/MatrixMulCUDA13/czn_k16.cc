@@ -15,11 +15,11 @@
 #include "bm_lib/basegemm.h"
 
 template <typename T>
-class Czn_K16 : public BaseGemm {
+class Czn_K16 : public BaseGemm<T> {
  public:
   void callKernel(benchmark::State& state) override {
-    GEMM13(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
-           BaseGemm::getDeviceC(), state.range(0), state.range(1),
+    GEMM13(BaseGemm<T>::getDeviceA(), BaseGemm<T>::getDeviceB(),
+           BaseGemm<T>::getDeviceC(), state.range(0), state.range(1),
            state.range(2));
   }
 
@@ -31,7 +31,7 @@ class Czn_K16 : public BaseGemm {
 
     // float* a = BaseGemm::getDeviceA();
     // float* b = BaseGemm::getDeviceB();
-    float* c = BaseGemm::getDeviceC();
+    float* c = BaseGemm<T>::getDeviceC();
 
     printf("\n");
     printf("\n");
@@ -49,8 +49,8 @@ class Czn_K16 : public BaseGemm {
     int n = state.range(1);
     int k = state.range(2);
 
-    float* a = BaseGemm::getDeviceA();
-    float* b = BaseGemm::getDeviceB();
+    float* a = BaseGemm<T>::getDeviceA();
+    float* b = BaseGemm<T>::getDeviceB();
 
     printf("\n");
     printf("\n");
@@ -75,8 +75,8 @@ class Czn_K16 : public BaseGemm {
 
     int k_th = 0;
 
-    float* a = BaseGemm::getDeviceA();
-    float* b = BaseGemm::getDeviceB();
+    float* a = BaseGemm<T>::getDeviceA();
+    float* b = BaseGemm<T>::getDeviceB();
     /*
      *      A 8
      *     ｜----｜
@@ -131,4 +131,5 @@ class Czn_K16 : public BaseGemm {
 
 #define BENCHMARK_GEMM13_OP_TYPE(dType) BENCHMARK_GEMM13_OP(Gemm_##dType, dType)
 
-BENCHMARK_GEMM13_OP_TYPE(float)
+// BENCHMARK_GEMM13_OP_TYPE(float)
+BENCHMARK_GEMM13_OP_TYPE(__half)

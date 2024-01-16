@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "utils.h"
-
+template <typename T>
 class BaseGemm : public benchmark::Fixture {
  public:
   virtual void callKernel(benchmark::State &state);
@@ -26,14 +26,14 @@ class BaseGemm : public benchmark::Fixture {
 
   double getFlops(const ::benchmark::State &state);
 
-  float *getDeviceA();
-  float *getDeviceB();
-  float *getDeviceC();
-  float *getDeviceTestC();
+  T *getDeviceA();
+  T *getDeviceB();
+  T *getDeviceC();
+  T *getDeviceTestC();
 
  private:
-  float *dA, *dB;
-  float *testC, *dC;
+  T *dA, *dB;
+  T *testC, *dC;
   long int dataSize;
   long int flops;
 };

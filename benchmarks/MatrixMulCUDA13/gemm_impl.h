@@ -20,8 +20,9 @@ namespace mmbenchmark {
 //                                     s_B]
 
 template <typename Gemm>
-__global__ void gemm_kernel(float* __restrict__ C, const float* __restrict__ A,
-                            const float* __restrict__ B, int M, int N, int K) {
+__global__ void gemm_kernel(__half* __restrict__ C,
+                            const __half* __restrict__ A,
+                            const __half* __restrict__ B, int M, int N, int K) {
   Gemm{}.main_run(C, A, B, M, N, K);
 }
 
@@ -29,8 +30,8 @@ template <int TILE_M, int TILE_N, int TILE_K, int WARP_M, int WARP_N,
           int WARP_K, int STAGES>
 struct Gemm {
   // kWarpCountM = m / w_m
-  static constexpr int kWarpCountM = TILE_M / WARP_M;  // 128 / 64
-  static constexpr int kWarpCountN = TILE_N / WARP_N;  // 128 / 32
+  static constexpr int kWarpCountM = TILE_M / WARP_M;  // 128 / 32
+  static constexpr int kWarpCountN = TILE_N / WARP_N;  // 128 / 64
   static constexpr int kWarpCountK = TILE_K / WARP_K;  // 8 / 8
 
   static constexpr int kWarpCountMN = kWarpCountM * kWarpCountN;  // 4 * 2 = 8
@@ -55,14 +56,15 @@ struct Gemm {
       mmbenchmark::WarpIteratorB<TILE_N, TILE_K, WARP_N, WARP_K,
                                  GlobalLoaderB::kSmemPadCtaN, STAGES>;
 
-  Array<half, 8> warp_frag_A_[2][WARP_M / OP_M];
-  Array<half, 4> warp_frag_B_[2][WARP_N / OP_N];
+  Array<half, 8> warp_frag_A_[2];
+  Array<half, 8> warp_frag_B_[2];
 
   __device__ void warp_calc(GlobalLoaderA& iter_A, GlobalLoaderB& iter_B,
                             WarpIterA& warp_iter_A, WarpIterB& warp_iter_B,
-                            float* accum, int slice_id, int& gemm_iter);
-  __device__ void main_run(float* __restrict__ C, const float* __restrict__ A,
-                           const float* __restrict__ B, int M, int N, int K);
+                            half* accum, int slice_id, int& gemm_iter);
+
+  __device__ void main_run(__half* __restrict__ C, const __half* __restrict__ A,
+                           const __half* __restrict__ B, int M, int N, int K);
   __device__ void sync_slice(int slice_id);
 
   template <typename T, int N>
@@ -80,7 +82,7 @@ struct GemmImpl : public iBaseGemm {
   static constexpr WarpShape warp_shape{};
 
   // 128, 128, 8
-  // 64, 32, 1
+  // 32, 64, 1
   using GemmType = Gemm<tile_shape.m(), tile_shape.n(), tile_shape.k(),
                         warp_shape.m(), warp_shape.n(), warp_shape.k(), STAGES>;
 
@@ -94,15 +96,11 @@ struct GemmImpl : public iBaseGemm {
   static constexpr int kSmemSizeB =
       GemmType::GlobalLoaderB::kSmemByteSize * kSlices;
   static constexpr int kSmemSizeC =
-      sizeof(float) * tile_shape.m() * tile_shape.n();
-  //   //todo
+      sizeof(__half) * tile_shape.m() * tile_shape.n();
+
   static constexpr int kSmemByteSize = kSmemSizeA + kSmemSizeB;
 
-  // // static shared memory size of Q
-  // static constexpr int kSmemSizeQ = sizeof(typename
-  // GemmType::IteratorQ::Storage);
-
-  void Launch(float* C, const float* A, const float* B, int M, int N,
+  void Launch(__half* C, const __half* A, const __half* B, int M, int N,
               int K) override {
     constexpr int block_size = GemmType::kWarpCount * WARP_SIZE;
 

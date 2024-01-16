@@ -1,9 +1,17 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
 
 #include <cublas_v2.h>
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 
+#include <algorithm>
+#include <array>
+#include <cstdarg>
+#include <iostream>
+#include <memory>
+#include <random>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #define checkCuda(call)                                                 \
@@ -29,16 +37,18 @@ namespace cudabm {
 // benchmark string helper
 std::string strFormat(const char* format, ...);
 
-void genRandom(std::vector<float>& vec);
-void genRandom(float* vec, unsigned long len);
-void genOnes(float* vec, unsigned long len);
-void Print(float* vec, size_t len);
-float Sum(float* vec, size_t len);
+template <typename T>
+void genRandom(T* vec, unsigned long len);
 
-void Gemm(float* dA, float* dB, float* dC, int m, int n, int k);
+template <typename T>
+void Gemm(T* dA, T* dB, T* dC, int m, int n, int k);
 
 template <typename Type>
 bool Equal(const unsigned int n, const Type* x, const Type* y,
            const Type tolerance);
+
+void genOnes(float* vec, unsigned long len);
+void Print(float* vec, size_t len);
+float Sum(float* vec, size_t len);
 
 }  // namespace cudabm

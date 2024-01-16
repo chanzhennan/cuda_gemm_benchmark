@@ -107,8 +107,8 @@ struct GlobalLoaderA {
   static constexpr int kSmemByteSize =
       kAccessSize * STAGES * kSizePerStage;  // 128 * 8 * 3
 
-  const float* src_;
-  float* smem_;
+  const __half* src_;
+  __half* smem_;
   uint32_t smem_int_ptr_;
 
   int m_;
@@ -131,8 +131,8 @@ struct GlobalLoaderA {
 
   int iter_m_{0};
 
-  __device__ GlobalLoaderA(const float* src, float* smem, int m, int k, int bm,
-                           int bk, int warp_id, int lane_id)
+  __device__ GlobalLoaderA(const __half* src, __half* smem, int m, int k,
+                           int bm, int bk, int warp_id, int lane_id)
       : src_(src),
         smem_(smem),
         smem_int_ptr_(cast_smem_ptr_to_uint(smem)),
@@ -264,7 +264,7 @@ struct GlobalLoaderA {
 template <int WARPS, int BLOCK_M, int BLOCK_N, int BLOCK_K, int STAGES,
           int SLICES>
 struct GlobalLoaderB {
-  static constexpr int SLICE_K = BLOCK_K / SLICES;  // 8
+  static constexpr int SLICE_K = BLOCK_K / SLICES;
   static constexpr int kElementSize = sizeof(float);
   using AccessType = float4;
   static constexpr int kAccessSize = sizeof(AccessType);
@@ -309,7 +309,7 @@ struct GlobalLoaderB {
   static constexpr int kSizePerTile = SLICE_K * kSmemPadCtaN;
   static constexpr int kSmemByteSize = kElementSize * STAGES * kSizePerTile;
 
-  const float* src_;
+  const __half* src_;
   void* smem_;
 
   int n_;
@@ -340,7 +340,7 @@ struct GlobalLoaderB {
   int iter_k_{0};
   int iter_n_{0};
 
-  __device__ GlobalLoaderB(const float* src, void* smem, int k, int n, int bk,
+  __device__ GlobalLoaderB(const __half* src, void* smem, int k, int n, int bk,
                            int bn, int warp_id, int lane_id)
       : src_(src),
         smem_((AccessType*)smem),
@@ -441,16 +441,17 @@ struct GlobalLoaderB {
   }
 
   __device__ void prefetch(bool mask) {
-    if (threadIdx.x < 32 && blockIdx.x == 0 && blockIdx.y == 0) {
-      // printf("tid = %d tile_thread_offset_k = %d tile_thread_offset_n = %d
-      // \n", threadIdx.x, tile_thread_offset_k, tile_thread_offset_n);
-      // printf("tid = %d tile_thread_offset_k = %d tile_thread_offset_n = %d
-      // \n", threadIdx.x, tile_thread_offset_k, tile_thread_offset_n);
-      printf("tid = %d, tmp_src_offset_ = %d tmp_dst_offset_ = %d\n",
-             threadIdx.x, tmp_src_offset_, tmp_dst_offset_);
-      // printf("tid = %d, cta_thread_offset_m = %d cta_thread_offset_k = %d\n",
-      // threadIdx.x, cta_thread_offset_m, cta_thread_offset_k);
-    }
+    // if (threadIdx.x < 32 && blockIdx.x == 0 && blockIdx.y == 0) {
+    //   // printf("tid = %d tile_thread_offset_k = %d tile_thread_offset_n = %d
+    //   // \n", threadIdx.x, tile_thread_offset_k, tile_thread_offset_n);
+    //   // printf("tid = %d tile_thread_offset_k = %d tile_thread_offset_n = %d
+    //   // \n", threadIdx.x, tile_thread_offset_k, tile_thread_offset_n);
+    //   printf("tid = %d, tmp_src_offset_ = %d tmp_dst_offset_ = %d\n",
+    //          threadIdx.x, tmp_src_offset_, tmp_dst_offset_);
+    //   // printf("tid = %d, cta_thread_offset_m = %d cta_thread_offset_k =
+    //   %d\n",
+    //   // threadIdx.x, cta_thread_offset_m, cta_thread_offset_k);
+    // }
 #if TURBOMIND_ARCH_SM80
     cp_async_cg_B(smem_int_ptr_ + tmp_dst_offset_,
                   (const AccessType*)(src_ + tmp_src_offset_),

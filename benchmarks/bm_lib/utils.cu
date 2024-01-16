@@ -1,11 +1,4 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-#include <algorithm>
-#include <array>
-#include <cstdarg>
-#include <iostream>
-#include <memory>
-#include <random>
-#include <vector>
 
 #include "utils.h"
 
@@ -50,17 +43,19 @@ std::string strFormat(const char* format, ...) {
   return tmp;
 }
 
-void genRandom(std::vector<float>& vec) {
-  std::mt19937 gen;
-  std::uniform_real_distribution<> dist(-10.0, 10.0);
-  std::generate_n(vec.begin(), vec.size(), [&] { return dist(gen); });
-}
+// template <typename T>
+// void genRandom(std::vector<T>& vec) {
+//   std::mt19937 gen;
+//   std::uniform_real_distribution<> dist(-10.0, 10.0);
+//   std::generate_n(vec.begin(), vec.size(), [&] { return dist(gen); });
+// }
 
-void genRandom(float* vec, unsigned long len) {
+template <typename T>
+void genRandom(T* vec, unsigned long len) {
   std::mt19937 gen;
   std::uniform_real_distribution<> dist(-10.0, 10.0);
   for (unsigned long i = 0; i < len; i++) {
-    vec[i] = dist(gen);
+    vec[i] = static_cast<T>(dist(gen));
   }
 }
 
@@ -87,21 +82,26 @@ float Sum(float* vec, size_t len) {
   return sum;
 }
 
-void Gemm(float* dA, float* dB, float* dC, int m, int n, int k) {
-  float alpha = 1.0f;
-  float beta = 0.0f;
-
+template <typename T>
+void Gemm(T* dA, T* dB, T* dC, int m, int n, int k) {
   cublasHandle_t blas_handle;
   cublasCreate(&blas_handle);
 
-  // if (status != CUBLAS_STATUS_SUCCESS)
-  //   std::runtime_error("!!!! CUBLAS initialization error\n");
-
   // C = A X B
-  cublasSgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, dB, n, dA,
-              k, &beta, dC, n);
+  if (std::is_same<T, float>::value) {
+    float alpha = 1.0f;
+    float beta = 0.0f;
+    cublasSgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha,
+                (float*)dB, n, (float*)dA, k, &beta, (float*)dC, n);
+
+  } else if (std::is_same<T, __half>::value) {
+    __half alpha = 1.0f;
+    __half beta = 0.0f;
+    cublasHgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha,
+                (__half*)dB, n, (__half*)dA, k, &beta, (__half*)dC, n);
+  }
+
   cublasDestroy(blas_handle);
-  // cudaDeviceSynchronize();
 }
 
 // Equal
@@ -120,34 +120,14 @@ bool Equal(const unsigned int n, const Type* x, const Type* y,
   return ok;
 }
 
-template <typename T, typename S>
-int cublas_gemm_ex(cublasHandle_t handle, cublasOperation_t transA,
-                   cublasOperation_t transB, int m, int n, int k, T* A, T* B,
-                   S* C, int lda, int ldb, int ldc, S* alpha, S* beta,
-                   int algo) {
-  cudaDataType_t AType, BType, CType, ComputeType;
-  if (std::is_same<T, float>::value) {
-    AType = BType = CType = ComputeType = CUDA_R_32F;
-  } else if (std::is_same<T, __half>::value) {
-    AType = BType = CType = ComputeType = CUDA_R_16F;
-  } else if (std::is_same<T, int8_t>::value) {
-    AType = BType = CUDA_R_8I;
-    CType = ComputeType = CUDA_R_32I;
-  } else {
-    printf("Not supported data type.");
-    return -1;
-  }
-  cublasStatus_t status;
-  status = cublasGemmEx(handle, transA, transB, m, n, k, alpha, A, AType, lda,
-                        B, BType, ldb, beta, C, CType, ldc, ComputeType,
-                        static_cast<cublasGemmAlgo_t>(algo));
-  if (status == CUBLAS_STATUS_SUCCESS)
-    return 1;
-  else
-    return -1;
-}
-
 template bool Equal<float>(const unsigned int n, const float* x, const float* y,
                            const float tolerance);
+
+template void genRandom<float>(float* vec, unsigned long len);
+template void genRandom<half>(half* vec, unsigned long len);
+
+template void Gemm<float>(float* dA, float* dB, float* dC, int m, int n, int k);
+template void Gemm<__half>(__half* dA, __half* dB, __half* dC, int m, int n,
+                           int k);
 
 }  // namespace cudabm
