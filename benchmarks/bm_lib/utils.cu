@@ -84,14 +84,14 @@ void Gemm(T* dA, T* dB, T* dC, int m, int n, int k) {
   if (std::is_same<T, float>::value) {
     float alpha = 1.0f;
     float beta = 0.0f;
-    cublasSgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha,
-                (float*)dB, n, (float*)dA, k, &beta, (float*)dC, n);
+    cublasSgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha,
+                (float*)dB, m, (float*)dA, k, &beta, (float*)dC, m);
 
   } else if (std::is_same<T, __half>::value) {
     __half alpha = 1.0f;
     __half beta = 0.0f;
-    cublasHgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha,
-                (__half*)dB, n, (__half*)dA, k, &beta, (__half*)dC, n);
+    cublasHgemm(blas_handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha,
+                (__half*)dB, m, (__half*)dA, k, &beta, (__half*)dC, m);
   }
 
   cublasDestroy(blas_handle);
@@ -112,8 +112,8 @@ bool Equal(const unsigned int n, const T* x, const T* y,
   for (unsigned int i = 0; i < n; ++i) {
     if (std::abs((float)x[i] - (float)y[i]) > std::abs(tolerance)) {
       std::cout << "max_diff " << max_diff << std::endl;
-      std::cout << "x :" << (float)x[i] << std::endl;
-      std::cout << "y :" << (float)y[i] << std::endl;
+      std::cout << "ours :" << (float)x[i] << " cublas :" << (float)y[i]
+                << std::endl;
       ok = false;
       return ok;
     }

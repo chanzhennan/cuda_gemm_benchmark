@@ -14,7 +14,7 @@ __global__ void gemm_kernel2(int m, int n, int k, T *a, T *b, T *c) {
   T *begin_b = b + bx * STEP;
   T *end_a = begin_a + k;
 
-  T sum[STRIDE][STRIDE] = {0.f};
+  float sum[STRIDE][STRIDE] = {0.f};
   for (T *a_ptr = begin_a, *b_ptr = begin_b; a_ptr < end_a;
        a_ptr += STEP, b_ptr += STEP * n) {
     __shared__ T ashare[STEP][STEP];
@@ -34,8 +34,8 @@ __global__ void gemm_kernel2(int m, int n, int k, T *a, T *b, T *c) {
     for (int i = 0; i < STRIDE; ++i) {
       for (int j = 0; j < STRIDE; ++j) {
         for (int kk = 0; kk < STEP; ++kk) {
-          sum[i][j] +=
-              ashare[ty * STRIDE + i][kk] * bshare[kk][tx * STRIDE + j];
+          sum[i][j] += (float)(ashare[ty * STRIDE + i][kk] *
+                               bshare[kk][tx * STRIDE + j]);
         }
       }
     }
@@ -46,7 +46,7 @@ __global__ void gemm_kernel2(int m, int n, int k, T *a, T *b, T *c) {
   for (int i = 0; i < STRIDE; ++i) {
     for (int j = 0; j < STRIDE; ++j) {
       c[(STEP * by + ty * STRIDE + i) * n + STEP * bx + tx * STRIDE + j] =
-          sum[i][j];
+          (T)sum[i][j];
     }
   }
 }
@@ -76,3 +76,5 @@ void GEMM2(T *dA, T *dB, T *dC, int m, int n, int k) {
 
 template void GEMM2<BLOCKSIZE, float>(float *dA, float *dB, float *dC, int m,
                                       int n, int k);
+template void GEMM2<BLOCKSIZE, __half>(__half *dA, __half *dB, __half *dC,
+                                       int m, int n, int k);

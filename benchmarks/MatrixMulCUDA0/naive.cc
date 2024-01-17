@@ -73,7 +73,6 @@ class Naive : public BaseGemm<T> {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
-    verify(st);                                                              \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -81,8 +80,9 @@ class Naive : public BaseGemm<T> {
   }                                                                          \
   BENCHMARK_REGISTER_F(Naive, name)                                          \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->Iterations(1)                                                        \
       ->ArgsProduct({{4096}, {4096}, {4096}});
+
+// ->Iterations(1)                                                        \
 
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 

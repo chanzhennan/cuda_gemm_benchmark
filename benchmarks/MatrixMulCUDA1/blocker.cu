@@ -14,7 +14,7 @@ __global__ void gemm_kernel1(int m, int n, int k, T *a, T *b, T *c) {
   T *begin_b = b + by * BLOCK;
   T *end_a = begin_a + k;
 
-  T sum = 0.f;
+  float sum = 0.f;
 
   // if k = 1024, block(16, 16)
   // for(1024/16):
@@ -30,12 +30,12 @@ __global__ void gemm_kernel1(int m, int n, int k, T *a, T *b, T *c) {
 
 #pragma unroll
     for (int kk = 0; kk < BLOCK; ++kk) {
-      sum += ashare[ty][kk] * bshare[kk][tx];
+      sum += (float)(ashare[ty][kk] * bshare[kk][tx]);
     }
     __syncthreads();
   }
 
-  c[(BLOCK * bx + ty) * n + BLOCK * by + tx] = sum;
+  c[(BLOCK * bx + ty) * n + BLOCK * by + tx] = (T)sum;
 }
 
 template <size_t BLOCK, typename T>
@@ -60,3 +60,5 @@ void GEMM1(T *dA, T *dB, T *dC, int m, int n, int k) {
 
 template void GEMM1<BLOCKSIZE, float>(float *dA, float *dB, float *dC, int m,
                                       int n, int k);
+template void GEMM1<BLOCKSIZE, __half>(__half *dA, __half *dB, __half *dC,
+                                       int m, int n, int k);

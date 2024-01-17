@@ -14,11 +14,11 @@
 #include "bm_lib/basegemm.h"
 
 template <typename T>
-class Blocker : public BaseGemm {
+class Blocker : public BaseGemm<T> {
  public:
   void callKernel(benchmark::State &state) override {
-    GEMM1<BLOCKSIZE>(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
-                     BaseGemm::getDeviceC(), state.range(0), state.range(1),
+    GEMM1<BLOCKSIZE>(BaseGemm<T>::getDeviceA(), BaseGemm<T>::getDeviceB(),
+                     BaseGemm<T>::getDeviceC(), state.range(0), state.range(1),
                      state.range(2));
   }
 };
@@ -36,8 +36,9 @@ class Blocker : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Blocker, name)                                        \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->ArgsProduct({{5120}, {4096}, {4096}});
+      ->ArgsProduct({{4096}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM1_OP_TYPE(dType) BENCHMARK_GEMM1_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM1_OP_TYPE(float)
+BENCHMARK_GEMM1_OP_TYPE(half)
