@@ -43,9 +43,8 @@ void genRandom(T* vec, unsigned long len);
 template <typename T>
 void Gemm(T* dA, T* dB, T* dC, int m, int n, int k);
 
-template <typename Type>
-bool Equal(const unsigned int n, const Type* x, const Type* y,
-           const Type tolerance);
+template <typename T>
+bool Equal(const unsigned int n, const T* x, const T* y, const float tolerance);
 
 void genOnes(float* vec, unsigned long len);
 void Print(float* vec, size_t len);

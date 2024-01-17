@@ -62,7 +62,7 @@ struct GlobalLoaderA {
   // 拉开，有多少global数据宝贝，就直接拷贝多少个数
   static constexpr int SLICE_K = BLOCK_K / SLICES;  // 8 / 1
 
-  using AccessType = float;  // 一个线程拷贝float4
+  using AccessType = __half;  // 一个线程拷贝float4
   static constexpr int kAccessSize = sizeof(AccessType);
 
   static_assert(BLOCK_M % 32 == 0 && BLOCK_K % 1 == 0,

@@ -14,11 +14,11 @@
 #include "bm_lib/basegemm.h"
 
 template <typename T>
-class Naive : public BaseGemm {
+class Naive : public BaseGemm<T> {
  public:
   void callKernel(benchmark::State& state) override {
-    GEMM0<TPB>(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
-               BaseGemm::getDeviceC(), state.range(0), state.range(1),
+    GEMM0<TPB>(BaseGemm<T>::getDeviceA(), BaseGemm<T>::getDeviceB(),
+               BaseGemm<T>::getDeviceC(), state.range(0), state.range(1),
                state.range(2));
   }
 
@@ -30,7 +30,7 @@ class Naive : public BaseGemm {
 
     // float* a = BaseGemm::getDeviceA();
     // float* b = BaseGemm::getDeviceB();
-    float* c = BaseGemm::getDeviceC();
+    T* c = BaseGemm<T>::getDeviceC();
 
     printf("\n");
     printf("\n");
@@ -48,8 +48,8 @@ class Naive : public BaseGemm {
     int n = state.range(1);
     int k = state.range(2);
 
-    float* a = BaseGemm::getDeviceA();
-    float* b = BaseGemm::getDeviceB();
+    T* a = BaseGemm<T>::getDeviceA();
+    T* b = BaseGemm<T>::getDeviceB();
 
     printf("\n");
     printf("\n");
@@ -73,7 +73,7 @@ class Naive : public BaseGemm {
     for (auto _ : st) {                                                      \
       callKernel(st);                                                        \
     }                                                                        \
-    myprint2(st);                                                            \
+    verify(st);                                                              \
     double iter = st.iterations();                                           \
     st.counters["operation"] = getFlops(st) * iter;                          \
     st.counters["TFlops"] = benchmark::Counter((getFlops(st) * iter / 1e12), \
@@ -87,3 +87,4 @@ class Naive : public BaseGemm {
 #define BENCHMARK_GEMM0_OP_TYPE(dType) BENCHMARK_GEMM0_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM0_OP_TYPE(float)
+BENCHMARK_GEMM0_OP_TYPE(half)

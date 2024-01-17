@@ -9,6 +9,13 @@ if(NOT DEFINED CUDA_ARCH)
   message(FATAL_ERROR "CUDA_ARCH macro is not defined. Please set CUDA_ARCH.")
 endif()
 
+# Find cuda SDK
+find_package(CUDA REQUIRED)
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --generate-line-info -O3 -std=c++17")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -Xptxas=-v -arch=sm_${CUDA_ARCH}")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -U__CUDA_NO_HALF_OPERATORS__")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} -U__CUDA_NO_HALF_CONVERSIONS__")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -22,9 +29,6 @@ endif()
 
 # Options
 option(USE_SYSTEM_LIBS "use system libs or not" OFF)
-
-# Find cuda SDK
-find_package(CUDA REQUIRED)
 
 # googletest
 include(FetchContent)

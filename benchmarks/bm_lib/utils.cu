@@ -43,17 +43,10 @@ std::string strFormat(const char* format, ...) {
   return tmp;
 }
 
-// template <typename T>
-// void genRandom(std::vector<T>& vec) {
-//   std::mt19937 gen;
-//   std::uniform_real_distribution<> dist(-10.0, 10.0);
-//   std::generate_n(vec.begin(), vec.size(), [&] { return dist(gen); });
-// }
-
 template <typename T>
 void genRandom(T* vec, unsigned long len) {
   std::mt19937 gen;
-  std::uniform_real_distribution<> dist(-10.0, 10.0);
+  std::uniform_real_distribution<> dist(-1.0, 1.0);
   for (unsigned long i = 0; i < len; i++) {
     vec[i] = static_cast<T>(dist(gen));
   }
@@ -105,13 +98,22 @@ void Gemm(T* dA, T* dB, T* dC, int m, int n, int k) {
 }
 
 // Equal
-template <typename Type>
-bool Equal(const unsigned int n, const Type* x, const Type* y,
-           const Type tolerance) {
+template <typename T>
+bool Equal(const unsigned int n, const T* x, const T* y,
+           const float tolerance) {
   bool ok = true;
 
+  float max_diff = 0.f;
+  for (int i = 0; i < n; i++) {
+    if (std::abs((float)x[i] - (float)y[i]) > max_diff)
+      max_diff = std::abs((float)x[i] - (float)y[i]);
+  }
+
   for (unsigned int i = 0; i < n; ++i) {
-    if (std::abs(x[i] - y[i]) > std::abs(tolerance)) {
+    if (std::abs((float)x[i] - (float)y[i]) > std::abs(tolerance)) {
+      std::cout << "max_diff " << max_diff << std::endl;
+      std::cout << "x :" << (float)x[i] << std::endl;
+      std::cout << "y :" << (float)y[i] << std::endl;
       ok = false;
       return ok;
     }
@@ -122,6 +124,8 @@ bool Equal(const unsigned int n, const Type* x, const Type* y,
 
 template bool Equal<float>(const unsigned int n, const float* x, const float* y,
                            const float tolerance);
+template bool Equal<half>(const unsigned int n, const half* x, const half* y,
+                          const float tolerance);
 
 template void genRandom<float>(float* vec, unsigned long len);
 template void genRandom<half>(half* vec, unsigned long len);
