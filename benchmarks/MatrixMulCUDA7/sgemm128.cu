@@ -6,18 +6,19 @@
 // sgemm_128x128x8
 // limit maxThreadsPerBlock in 256,
 // limit minBlocksPerMultiprocessor in 2 (at least 2 active warp resource)
+template <typename T>
 __global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
-                                                       const float *a,
-                                                       const float *b,
-                                                       float *c) {
+                                                       const T *a, const T *b,
+                                                       T *c) {
   __shared__ __align__(
       16 * 1024) char smem[24 * 1024];  // 16KB shared memory for buffer
 
-  float *ashare = reinterpret_cast<float *>(smem);  // 16K Smem for A
-  float *bshare = reinterpret_cast<float *>(smem + 16 * 1024);  // 8k Smem for B
+  T *ashare = reinterpret_cast<T *>(smem);              // 16K Smem for A
+  T *bshare = reinterpret_cast<T *>(smem + 16 * 1024);  // 8k Smem for B
 
   float sum[8][8] = {0};  // do 64 FMA each thread
-  float panelA[8] = {0}, panelB[8] = {0};
+  T panelA[8] = {0};
+  T panelB[8] = {0};
 
   int idx8 = threadIdx.x % 8;  // 128 ==>  8 * 16
   int idy8 = threadIdx.x / 8;
@@ -102,7 +103,7 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
 
 #pragma unroll
     for (int subk = 0; subk < 8; ++subk) {
-      float *ptrA = ashare + aidx0 + subk * SMEM_LDA;
+      T *ptrA = ashare + aidx0 + subk * SMEM_LDA;
 
 #pragma unroll
       for (int i = 0; i < 4; ++i) {
@@ -110,7 +111,7 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
         panelA[i + 4] = ptrA[i + 64];
       }
 
-      const float *ptrB = bshare + bidx0 + subk * SMEM_LDB;
+      const T *ptrB = bshare + bidx0 + subk * SMEM_LDB;
 #pragma unroll
       for (int i = 0; i < 4; ++i) {
         panelB[i] = ptrB[i];
@@ -121,7 +122,7 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
       for (int i = 0; i < 8; ++i) {
 #pragma unroll
         for (int j = 0; j < 8; ++j) {
-          sum[i][j] += panelA[i] * panelB[j];
+          sum[i][j] += (float)(panelA[i] * panelB[j]);
         }
       }
     }
@@ -134,10 +135,10 @@ __global__ __launch_bounds__(256, 2) void gemm_kernel7(int m, int n, int k,
 #pragma unroll
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {
-      c[write_offset + i * n + j] = sum[i][j];
-      c[write_offset + i * n + j + 64] = sum[i][j + 4];
-      c[write_offset + (i + 64) * n + j] = sum[i + 4][j];
-      c[write_offset + (i + 64) * n + j + 64] = sum[i + 4][j + 4];
+      c[write_offset + i * n + j] = (T)sum[i][j];
+      c[write_offset + i * n + j + 64] = (T)sum[i][j + 4];
+      c[write_offset + (i + 64) * n + j] = (T)sum[i + 4][j];
+      c[write_offset + (i + 64) * n + j + 64] = (T)sum[i + 4][j + 4];
     }
   }
 }
@@ -149,9 +150,12 @@ template <typename T>
 void GEMM7(T *dA, T *dB, T *dC, int m, int n, int k) {
   constexpr int BLOCK = 128;
   dim3 grid((m + BLOCK - 1) / BLOCK, (n + BLOCK - 1) / BLOCK);
-  gemm_kernel7<<<grid, 256>>>(m, n, k, dA, dB, dC);
+  gemm_kernel7<T><<<grid, 256>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
 template void GEMM7<float>(float *dA, float *dB, float *dC, int m, int n,
                            int k);
+
+template void GEMM7<__half>(__half *dA, __half *dB, __half *dC, int m, int n,
+                            int k);

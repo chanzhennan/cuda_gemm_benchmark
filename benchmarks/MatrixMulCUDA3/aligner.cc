@@ -1,5 +1,4 @@
 // Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
-// Copyright (c) 2023 Zhennanc Ltd. All rights reserved.
 #include "MatrixMulCUDA3/aligner.cuh"
 
 #include <benchmark/benchmark.h>
@@ -14,11 +13,11 @@
 #include "bm_lib/basegemm.h"
 
 template <typename T>
-class Aligner : public BaseGemm {
+class Aligner : public BaseGemm<T> {
  public:
   void callKernel(benchmark::State &state) override {
-    GEMM3<BLOCKSIZE>(BaseGemm::getDeviceA(), BaseGemm::getDeviceB(),
-                     BaseGemm::getDeviceC(), state.range(0), state.range(1),
+    GEMM3<BLOCKSIZE>(BaseGemm<T>::getDeviceA(), BaseGemm<T>::getDeviceB(),
+                     BaseGemm<T>::getDeviceC(), state.range(0), state.range(1),
                      state.range(2));
   }
 };
@@ -36,8 +35,9 @@ class Aligner : public BaseGemm {
   }                                                                          \
   BENCHMARK_REGISTER_F(Aligner, name)                                        \
       ->Unit(benchmark::kMillisecond)                                        \
-      ->ArgsProduct({{5120}, {4096}, {4096}});
+      ->ArgsProduct({{4096}, {4096}, {4096}});
 
 #define BENCHMARK_GEMM3_OP_TYPE(dType) BENCHMARK_GEMM3_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM3_OP_TYPE(float)
+BENCHMARK_GEMM3_OP_TYPE(half)

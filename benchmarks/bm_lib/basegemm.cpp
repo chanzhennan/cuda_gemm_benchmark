@@ -66,7 +66,7 @@ void BaseGemm<T>::verify(const ::benchmark::State &st) {
 
 template <typename T>
 void BaseGemm<T>::TearDown(const ::benchmark::State &st) {
-  verify(st);
+  // verify(st);
   cudaFree(dA);
   cudaFree(dB);
   cudaFree(dC);

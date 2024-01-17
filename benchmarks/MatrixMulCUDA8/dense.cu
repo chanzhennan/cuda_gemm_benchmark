@@ -16,10 +16,11 @@ template <
     const int THREAD_SIZE_Y,  // height of block of C that each thread calculate
     const int THREAD_SIZE_X,  // width of block of C that each thread calculate
     const bool ENABLE_DOUBLE_BUFFER  // whether enable double buffering or not
-    >
-__global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
-                             float *__restrict__ C, const int M, const int K,
-                             const int N, float alpha, float beta) {
+    ,
+    typename T>
+__global__ void gemm_kernel8(T *__restrict__ A, T *__restrict__ B,
+                             T *__restrict__ C, const int M, const int K,
+                             const int N) {
   // size of thread block
   const int bszx = BLOCK_SIZE_N / THREAD_SIZE_X;
   const int bszy = BLOCK_SIZE_M / THREAD_SIZE_Y;
@@ -30,8 +31,8 @@ __global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
 
   // shared memory
 
-  __shared__ float As[BLOCK_SIZE_M][BLOCK_SIZE_K];  // avoid bank conflict
-  __shared__ float Bs[BLOCK_SIZE_K][BLOCK_SIZE_N];
+  __shared__ T As[BLOCK_SIZE_M][BLOCK_SIZE_K];  // avoid bank conflict
+  __shared__ T Bs[BLOCK_SIZE_K][BLOCK_SIZE_N];
   // registers for C
   float accum[THREAD_SIZE_Y][THREAD_SIZE_X] = {0};
 
@@ -56,15 +57,10 @@ __global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
       const int row = BLOCK_SIZE_M * blockIdx.y + i + A_TILE_ROW;
       const int col = A_TILE_COL + tile_idx;
       if (blockIdx.x == gridDim.x - 1 || blockIdx.y == gridDim.y - 1) {
-        As[i + A_TILE_ROW][A_TILE_COL] = row < M && col < K
-                                             ? A[OFFSET(row,  // row
-                                                        col,  // col
-                                                        K)]
-                                             : 0;
+        As[i + A_TILE_ROW][A_TILE_COL] =
+            row < M && col < K ? A[OFFSET(row, col, K)] : (T)0;
       } else {
-        As[i + A_TILE_ROW][A_TILE_COL] = A[OFFSET(row,  // row
-                                                  col,  // col
-                                                  K)];
+        As[i + A_TILE_ROW][A_TILE_COL] = A[OFFSET(row, col, K)];
       }
     }
 
@@ -74,15 +70,10 @@ __global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
       const int row = tile_idx + i + B_TILE_ROW;
       const int col = B_TILE_COL + BLOCK_SIZE_N * blockIdx.x;
       if (blockIdx.x == gridDim.x - 1 || blockIdx.y == gridDim.y - 1) {
-        Bs[i + B_TILE_ROW][B_TILE_COL] = row < K && col < N
-                                             ? B[OFFSET(row,  // row
-                                                        col,  // col
-                                                        N)]
-                                             : 0;
+        Bs[i + B_TILE_ROW][B_TILE_COL] =
+            row < K && col < N ? B[OFFSET(row, col, N)] : (T)0;
       } else {
-        Bs[i + B_TILE_ROW][B_TILE_COL] = B[OFFSET(row,  // row
-                                                  col,  // col
-                                                  N)];
+        Bs[i + B_TILE_ROW][B_TILE_COL] = B[OFFSET(row, col, N)];
       }
     }
 
@@ -96,8 +87,9 @@ __global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
 #pragma unroll
         for (int thread_x = 0; thread_x < THREAD_SIZE_X; ++thread_x) {
           // accum[thread_y][thread_x] += frag_a[thread_y] * frag_b[thread_x];
-          accum[thread_y][thread_x] += As[thread_y * A_S + threadIdx.y][k] *
-                                       Bs[k][thread_x * B_S + threadIdx.x];
+          accum[thread_y][thread_x] +=
+              (float)(As[thread_y * A_S + threadIdx.y][k] *
+                      Bs[k][thread_x * B_S + threadIdx.x]);
         }
       }
     }
@@ -113,12 +105,10 @@ __global__ void gemm_kernel8(float *__restrict__ A, float *__restrict__ B,
       const int col = BLOCK_SIZE_N * blockIdx.x + thread_x * B_S + threadIdx.x;
       if (blockIdx.x == gridDim.x - 1 || blockIdx.y == gridDim.y - 1) {
         if (row < M && col < N) {
-          C[OFFSET(row, col, N)] =
-              C[OFFSET(row, col, N)] * beta + accum[thread_y][thread_x] * alpha;
+          C[OFFSET(row, col, N)] = (T)accum[thread_y][thread_x];
         }
       } else {
-        C[OFFSET(row, col, N)] =
-            C[OFFSET(row, col, N)] * beta + accum[thread_y][thread_x] * alpha;
+        C[OFFSET(row, col, N)] = (T)accum[thread_y][thread_x];
       }
     }
   }
@@ -135,18 +125,18 @@ void GEMM8(T *dA, T *dB, T *dC, int m, int n, int k) {
   const int THREAD_SIZE_X = 4;
   const bool ENABLE_DOUBLE_BUFFER = false;
 
-  float alpha = 1.0;
-  float beta = 0.0;
-
   dim3 dimBlock(BLOCK_SIZE_N / THREAD_SIZE_X, BLOCK_SIZE_M / THREAD_SIZE_Y);
   dim3 dimGrid(n / BLOCK_SIZE_N, m / BLOCK_SIZE_M);
   if (n % BLOCK_SIZE_N != 0) dimGrid.x++;
   if (m % BLOCK_SIZE_M != 0) dimGrid.y++;
   gemm_kernel8<BLOCK_SIZE_M, BLOCK_SIZE_K, BLOCK_SIZE_N, THREAD_SIZE_Y,
-               THREAD_SIZE_X, ENABLE_DOUBLE_BUFFER>
-      <<<dimGrid, dimBlock>>>(dA, dB, dC, m, k, n, alpha, beta);
+               THREAD_SIZE_X, ENABLE_DOUBLE_BUFFER, T>
+      <<<dimGrid, dimBlock>>>(dA, dB, dC, m, k, n);
   cudaDeviceSynchronize();
 }
 
 template void GEMM8<float>(float *dA, float *dB, float *dC, int m, int n,
                            int k);
+
+template void GEMM8<__half>(__half *dA, __half *dB, __half *dC, int m, int n,
+                            int k);

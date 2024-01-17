@@ -1,9 +1,8 @@
 #include "MatrixMulCUDA4/multiloader.cuh"
 
 // a = mxk, b = kxn
-template <int BLOCK, int STRIDE>
-__global__ void gemm_kernel4(int m, int n, int k, float *a, float *b,
-                             float *c) {
+template <int BLOCK, int STRIDE, typename T>
+__global__ void gemm_kernel4(int m, int n, int k, T *a, T *b, T *c) {
   // blockIdx control subpanel matrix
   constexpr int STEP = BLOCK * STRIDE;
   const int tx = threadIdx.x * STRIDE;
@@ -11,17 +10,17 @@ __global__ void gemm_kernel4(int m, int n, int k, float *a, float *b,
   const int bx = blockIdx.x * STEP;
   const int by = blockIdx.y * STEP;
 
-  float *begin_a = a + by * k;
-  float *begin_b = b + bx;
-  float *end_a = begin_a + k;
+  T *begin_a = a + by * k;
+  T *begin_b = b + bx;
+  T *end_a = begin_a + k;
 
   float sum[STRIDE][STRIDE] = {0.f};
 
   // bigger stash for more data load
-  __shared__ float ashare[STEP][2 * STEP];
-  __shared__ float bshare[2 * STEP][STEP];
+  __shared__ T ashare[STEP][2 * STEP];
+  __shared__ T bshare[2 * STEP][STEP];
 
-  for (float *a_ptr = begin_a, *b_ptr = begin_b; a_ptr < end_a;
+  for (T *a_ptr = begin_a, *b_ptr = begin_b; a_ptr < end_a;
        a_ptr += 2 * STEP, b_ptr += 2 * STEP * n) {
     for (int i = 0; i < STRIDE; ++i) {
       for (int j = 0; j < STRIDE; ++j) {
@@ -39,7 +38,7 @@ __global__ void gemm_kernel4(int m, int n, int k, float *a, float *b,
     for (int i = 0; i < STRIDE; ++i) {
       for (int j = 0; j < STRIDE; ++j) {
         for (int kk = 0; kk < 2 * STEP; ++kk) {
-          sum[i][j] += ashare[ty + i][kk] * bshare[kk][tx + j];
+          sum[i][j] += (float)(ashare[ty + i][kk] * bshare[kk][tx + j]);
         }
       }
     }
@@ -50,7 +49,7 @@ __global__ void gemm_kernel4(int m, int n, int k, float *a, float *b,
 #pragma unroll
   for (int i = 0; i < STRIDE; ++i) {
     for (int j = 0; j < STRIDE; ++j) {
-      c[(by + ty + i) * n + bx + tx + j] = sum[i][j];
+      c[(by + ty + i) * n + bx + tx + j] = (T)sum[i][j];
     }
   }
 }
@@ -74,9 +73,12 @@ void GEMM4(T *dA, T *dB, T *dC, int m, int n, int k) {
   constexpr int STRIDE = 2;  // every thread calc STRIDExSTRIDE result
   dim3 block(BLOCK, BLOCK);
   dim3 grid((m + BLOCK - 1) / BLOCK / STRIDE, (n + BLOCK - 1) / BLOCK / STRIDE);
-  gemm_kernel4<BLOCK, STRIDE><<<grid, block>>>(m, n, k, dA, dB, dC);
+  gemm_kernel4<BLOCK, STRIDE, T><<<grid, block>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
 template void GEMM4<BLOCKSIZE, float>(float *dA, float *dB, float *dC, int m,
                                       int n, int k);
+
+template void GEMM4<BLOCKSIZE, __half>(__half *dA, __half *dB, __half *dC,
+                                       int m, int n, int k);

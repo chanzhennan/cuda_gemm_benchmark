@@ -1,9 +1,8 @@
 #include "MatrixMulCUDA6/pingpongbuffer.cuh"
 
 // a = mxk, b = kxn
-template <int BLOCK, int STRIDE>
-__global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
-                             float *c) {
+template <int BLOCK, int STRIDE, typename T>
+__global__ void gemm_kernel6(int m, int n, int k, T *a, T *b, T *c) {
   // blockIdx control subpanel matrix
   constexpr int STEP = BLOCK * STRIDE;
   const int tx = threadIdx.x * STRIDE;
@@ -11,14 +10,14 @@ __global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
   const int bx = blockIdx.x * STEP;
   const int by = blockIdx.y * STEP;
 
-  float *begin_a = a + by * k;
-  float *begin_b = b + bx;
-  float *end_a = begin_a + k;
-  __shared__ float ashare[2][STEP][STEP];
-  __shared__ float bshare[2][STEP][STEP];
+  T *begin_a = a + by * k;
+  T *begin_b = b + bx;
+  T *end_a = begin_a + k;
+  __shared__ T ashare[2][STEP][STEP];
+  __shared__ T bshare[2][STEP][STEP];
 
   float sum[STRIDE][STRIDE] = {0.f};
-  float *a_ptr = begin_a, *b_ptr = begin_b;
+  T *a_ptr = begin_a, *b_ptr = begin_b;
 
 #define LOAD(IDX)                                                   \
   do {                                                              \
@@ -35,7 +34,8 @@ __global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
   for (int i = 0; i < STRIDE; ++i) {                                    \
     for (int j = 0; j < STRIDE; ++j) {                                  \
       for (int kk = 0; kk < STEP; ++kk) {                               \
-        sum[i][j] += ashare[IDX][ty + i][kk] * bshare[IDX][kk][tx + j]; \
+        sum[i][j] +=                                                    \
+            (float)(ashare[IDX][ty + i][kk] * bshare[IDX][kk][tx + j]); \
       }                                                                 \
     }                                                                   \
   }
@@ -56,7 +56,7 @@ __global__ void gemm_kernel6(int m, int n, int k, float *a, float *b,
 #pragma unroll
   for (int i = 0; i < STRIDE; ++i) {
     for (int j = 0; j < STRIDE; ++j) {
-      c[(by + ty + i) * n + bx + tx + j] = sum[i][j];
+      c[(by + ty + i) * n + bx + tx + j] = (T)sum[i][j];
     }
   }
 }
@@ -81,9 +81,12 @@ void GEMM6(T *dA, T *dB, T *dC, int m, int n, int k) {
   constexpr int STRIDE = 4;
   dim3 block(BLOCK, BLOCK);
   dim3 grid((m + BLOCK - 1) / BLOCK / STRIDE, (n + BLOCK - 1) / BLOCK / STRIDE);
-  gemm_kernel6<BLOCK, STRIDE><<<grid, block>>>(m, n, k, dA, dB, dC);
+  gemm_kernel6<BLOCK, STRIDE, T><<<grid, block>>>(m, n, k, dA, dB, dC);
   cudaDeviceSynchronize();
 }
 
 template void GEMM6<BLOCKSIZE, float>(float *dA, float *dB, float *dC, int m,
                                       int n, int k);
+
+template void GEMM6<BLOCKSIZE, __half>(__half *dA, __half *dB, __half *dC,
+                                       int m, int n, int k);

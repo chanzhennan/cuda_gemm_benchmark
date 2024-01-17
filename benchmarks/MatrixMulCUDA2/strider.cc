@@ -41,4 +41,4 @@ class Strider : public BaseGemm<T> {
 #define BENCHMARK_GEMM2_OP_TYPE(dType) BENCHMARK_GEMM2_OP(Gemm_##dType, dType)
 
 BENCHMARK_GEMM2_OP_TYPE(float)
-BENCHMARK_GEMM2_OP_TYPE(__half)
+BENCHMARK_GEMM2_OP_TYPE(half)
