@@ -1,0 +1,8 @@
+[submodule "benchmarks/3rdparty/bmlib"]
+	path = benchmarks/3rdparty/bmlib
+	url = https://github.com/chanzhennan/bmlib.git
+	branch = master
+[submodule "3rdparty/bmlib"]
+	path = 3rdparty/bmlib
+	url = https://github.com/chanzhennan/bmlib.git
+	branch = master

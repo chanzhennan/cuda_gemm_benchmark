@@ -70,4 +70,7 @@ include_directories(${googlebenchmark_SOURCE_DIR}/include)
 
 include_directories(benchmarks)
 
+add_subdirectory(3rdparty/bmlib)
+include_directories(${CMAKE_SOURCE_DIR}/3rdparty/)
+
 add_subdirectory(benchmarks)
